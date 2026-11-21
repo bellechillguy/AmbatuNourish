@@ -150,7 +150,7 @@ export function RegisterScreen() {
         textContentType="name"
         returnKeyType="next"
         onSubmitEditing={() => refs.email.current?.focus()}
-        editable={!loading}
+        disabled={loading}
       />
       <TextField
         ref={refs.email}
@@ -165,7 +165,7 @@ export function RegisterScreen() {
         textContentType="emailAddress"
         returnKeyType="next"
         onSubmitEditing={() => refs.password.current?.focus()}
-        editable={!loading}
+        disabled={loading}
       />
       <TextField
         ref={refs.password}
@@ -180,7 +180,7 @@ export function RegisterScreen() {
         trailingIcon={showPassword ? 'eye-off' : 'eye'}
         trailingLabel={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
         onTrailingPress={() => setShowPassword((s) => !s)}
-        editable={!loading}
+        disabled={loading}
       />
       <Checkbox
         checked={agreed}
