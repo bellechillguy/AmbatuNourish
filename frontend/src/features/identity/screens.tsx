@@ -4,7 +4,7 @@
  * Field & aturan kata sandi mengikuti Identity & Access API (PENDING) — tidak di-hard-code.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, View, type TextInput } from 'react-native';
+import { AccessibilityInfo, Pressable, StyleSheet, View, type TextInputInstance } from 'react-native';
 
 import { useRootNav } from '../../app/navigation/types';
 import { errorMessage, toAppError } from '../../shared/api/errors';
@@ -84,7 +84,7 @@ export function RegisterScreen() {
   const [errors, setErrors] = useState<Record<string, string | null>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const refs = { name: useRef<TextInput>(null), email: useRef<TextInput>(null), password: useRef<TextInput>(null) };
+  const refs = { name: useRef<TextInputInstance>(null), email: useRef<TextInputInstance>(null), password: useRef<TextInputInstance>(null) };
 
   const validate = () => {
     const e: Record<string, string | null> = {
@@ -252,7 +252,7 @@ export function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErr, setFieldErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const passwordRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
 
   const submit = async () => {
     setError(null);

@@ -1,5 +1,5 @@
 import React, { forwardRef } from 'react';
-import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View, type TextInputInstance, type TextInputProps } from 'react-native';
 
 import { AppText, Icon, ListRow, NutrientRow, NutritionTableHeader, StatusChip, Tile, completenessChip } from '../../shared/components';
 import { NUTRIENT_LABEL, basisUnit, scaleValue } from '../../shared/domain/nutrients';
@@ -9,7 +9,7 @@ import { formatDate } from '../../shared/utils/date';
 import { formatNumber } from '../../shared/utils/format';
 
 /** Search Field 48pt — border 1.5 Label/Secondary, radius 12, ikon search. */
-export const SearchField = forwardRef<TextInput, TextInputProps & { onPressField?: () => void }>(function SearchField(
+export const SearchField = forwardRef<TextInputInstance, TextInputProps & { onPressField?: () => void }>(function SearchField(
   { onPressField, placeholder = 'Cari nama produk atau barcode', value, ...props },
   ref,
 ) {

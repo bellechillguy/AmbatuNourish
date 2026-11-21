@@ -486,7 +486,7 @@ const styles = StyleSheet.create({
   scannerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
   roundControl: { borderRadius: 22, backgroundColor: colors.cameraControl },
   preview: { borderRadius: 16, overflow: 'hidden', backgroundColor: colors.cameraSurface, minHeight: 280 },
-  previewOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: spacing.m },
+  previewOverlay: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center', gap: spacing.m },
   reticle: { width: 300, maxWidth: '86%', height: 170, borderWidth: 3, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   scanLine: { width: '87%', height: 2, borderRadius: 1 },
   backplate: { backgroundColor: 'rgba(14, 23, 18, 0.72)', borderRadius: 8, paddingHorizontal: spacing.m, paddingVertical: spacing.xs },

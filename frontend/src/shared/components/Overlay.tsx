@@ -177,7 +177,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.scrim },
+  scrim: { ...StyleSheet.absoluteFill, backgroundColor: colors.scrim },
   sheet: {
     position: 'absolute',
     left: 0,

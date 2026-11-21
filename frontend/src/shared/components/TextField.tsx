@@ -1,5 +1,5 @@
 import React, { forwardRef, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View, type TextInputProps, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View, type TextInputInstance, type TextInputProps, type StyleProp, type ViewStyle } from 'react-native';
 
 import { colors, radius, spacing, typography } from '../theme';
 import { AppText } from './AppText';
@@ -26,7 +26,7 @@ interface TextFieldProps extends Omit<TextInputProps, 'style' | 'editable'> {
  * Text Field — state Figma: Default, Focused, Error, Disabled.
  * Error: border merah 2pt + ikon alert + pesan cara memperbaiki (terhubung ke a11y).
  */
-export const TextField = forwardRef<TextInput, TextFieldProps>(function TextField(
+export const TextField = forwardRef<TextInputInstance, TextFieldProps>(function TextField(
   {
     label,
     unit,
