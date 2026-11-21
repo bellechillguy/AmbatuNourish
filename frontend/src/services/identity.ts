@@ -1,8 +1,4 @@
-/**
- * Identity & Access (generic subdomain, milik layanan bersama / Ambatufit).
- * HTTP mengikuti gateway yang sudah ada: /api/auth/ → koleksi `users` PocketBase.
- * Field profil & aturan kata sandi menunggu kontrak Identity & Access (FR-AUTH-07).
- */
+/** Identity & Access diakses lewat gateway AmbatuNourish. */
 import { config } from '../shared/api/config';
 import { AppError } from '../shared/api/errors';
 import { request } from '../shared/api/http';
@@ -23,52 +19,25 @@ export interface IdentityService {
   logout(): Promise<void>;
 }
 
-/* ---------- HTTP (gateway PocketBase) ---------- */
-
-interface PbUser {
-  id: string;
-  name?: string;
-  email: string;
-}
-
-const toProfile = (r: PbUser): UserProfile => ({ id: r.id, name: r.name ?? '', email: r.email });
-
 class HttpIdentityService implements IdentityService {
-  async register(input: RegisterInput): Promise<Session> {
-    await request<PbUser>('/auth/records', {
-      method: 'POST',
-      auth: false,
-      body: { name: input.name, email: input.email, password: input.password, passwordConfirm: input.password },
-    });
-    return this.login(input.email, input.password);
+  register(input: RegisterInput): Promise<Session> {
+    return request('/auth/register', { method: 'POST', auth: false, body: input });
   }
 
-  async login(email: string, password: string): Promise<Session> {
-    try {
-      const res = await request<{ token: string; record: PbUser }>('/auth/auth-with-password', {
-        method: 'POST',
-        auth: false,
-        body: { identity: email, password },
-      });
-      return { token: res.token, user: toProfile(res.record) };
-    } catch (e) {
-      // PocketBase mengembalikan 400 untuk kredensial salah → tampilkan error level form.
-      if (e instanceof AppError && e.kind === 'VALIDATION') throw new AppError('UNAUTHORIZED');
-      throw e;
-    }
+  login(email: string, password: string): Promise<Session> {
+    return request('/auth/login', { method: 'POST', auth: false, body: { email, password } });
   }
 
-  async requestPasswordReset(email: string): Promise<void> {
-    await request('/auth/request-password-reset', { method: 'POST', auth: false, body: { email } });
+  requestPasswordReset(email: string): Promise<void> {
+    return request('/auth/reset-password', { method: 'POST', auth: false, body: { email } });
   }
 
-  async updateProfile(userId: string, patch: { name: string }): Promise<UserProfile> {
-    const r = await request<PbUser>(`/auth/records/${encodeURIComponent(userId)}`, { method: 'PATCH', body: patch });
-    return toProfile(r);
+  updateProfile(_userId: string, patch: { name: string }): Promise<UserProfile> {
+    return request('/auth/me', { method: 'PATCH', body: patch });
   }
 
-  async logout(): Promise<void> {
-    // Token stateless (JWT); pembersihan dilakukan di perangkat.
+  logout(): Promise<void> {
+    return request('/auth/logout', { method: 'POST' });
   }
 }
 

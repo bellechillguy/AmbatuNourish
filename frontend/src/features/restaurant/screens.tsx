@@ -187,11 +187,12 @@ export function RestaurantResultsScreen({
   const entry = plans.find((p) => p.id === planId);
   const results = useAsync(
     () => (entry ? mealPlanningService.findRestaurants(entry, { kind, text, latitude, longitude }) : Promise.resolve([])),
-    [planId, kind, text, latitude, longitude],
+    [planId, kind, text, latitude, longitude, entry?.id, entry?.version],
   );
   const changeLocation = () => nav.replace('ManualLocation', { planId });
   const list = results.data ?? [];
   const partnerDown = results.error && results.error.kind !== 'OFFLINE';
+  const pending = results.error?.kind === 'CONTRACT_PENDING';
 
   return (
     <Screen gap={spacing.m}>
@@ -202,10 +203,10 @@ export function RestaurantResultsScreen({
         <>
           <Banner
             type={partnerDown ? 'partnerUnavailable' : 'offline'}
-            title={partnerDown ? 'Layanan Ambatueat sedang tidak tersedia' : 'Pencarian restoran butuh koneksi internet'}
-            message="Pencarian restoran tidak bisa dilakukan saat ini. Rencana makan Anda tidak terpengaruh."
-            actionLabel="Coba lagi"
-            onAction={results.reload}
+            title={pending ? 'Integrasi Ambatueat belum tersedia' : partnerDown ? 'Layanan Ambatueat sedang tidak tersedia' : 'Pencarian restoran butuh koneksi internet'}
+            message={pending ? 'Pencarian restoran menunggu kontrak layanan Ambatueat.' : undefined}
+            actionLabel={pending ? undefined : 'Coba lagi'}
+            onAction={pending ? undefined : results.reload}
           />
           <Button label="Kembali ke rencana" icon="back" type="secondary" onPress={() => nav.goBack()} />
         </>

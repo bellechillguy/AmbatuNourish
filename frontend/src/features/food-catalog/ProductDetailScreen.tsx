@@ -112,15 +112,17 @@ export function ProductDetailScreen({ route }: { route: { params: { productId: s
   const logSource = user ? 'MANUAL' : 'SEARCH';
   const unit = basisUnit(product.basis);
   const extra = otherNutrients(product);
+  const hasBasis = product.basisKnown !== false;
 
   return (
     <Screen
       gap={14}
       actionBar={
         <ActionBar>
-          <Button label="Nilai untuk porsi saya" onPress={() => setPortionOpen(true)} />
+          <Button label="Nilai untuk porsi saya" disabled={!hasBasis} onPress={() => setPortionOpen(true)} />
           <Button
             label="Catat konsumsi"
+            disabled={!hasBasis}
             icon="plus"
             type="secondary"
             onPress={() => nav.navigate('LogForm', { source: logSource, productId: product.id })}
@@ -156,8 +158,8 @@ export function ProductDetailScreen({ route }: { route: { params: { productId: s
         onLeading={() => nav.goBack()}
         actions={[
           ...(user ? [{ icon: 'edit' as const, label: 'Ubah produk', onPress: () => nav.navigate('ManualProductForm', { productId: product.id }) }] : []),
-          { icon: 'compare' as const, label: 'Tambahkan ke perbandingan', onPress: addToCompare },
-          ...(!user ? [{ icon: 'heart' as const, label: 'Simpan sebagai favorit', onPress: () => nav.navigate('FavoriteEdit', { productId: product.id }) }] : []),
+          ...(hasBasis ? [{ icon: 'compare' as const, label: 'Tambahkan ke perbandingan', onPress: addToCompare }] : []),
+          ...(!user && hasBasis ? [{ icon: 'heart' as const, label: 'Simpan sebagai favorit', onPress: () => nav.navigate('FavoriteEdit', { productId: product.id }) }] : []),
         ]}
       />
 
@@ -165,7 +167,7 @@ export function ProductDetailScreen({ route }: { route: { params: { productId: s
         <Banner
           type="stale"
           title="Data mungkin belum terbaru"
-          message={`Ditampilkan dari penyimpanan perangkat, diperbarui ${product.fetchedAt ? ageLabel(product.fetchedAt) : 'sebelumnya'}. Hubungkan internet untuk memeriksa versi terbaru.`}
+          message={`Terakhir diperbarui ${product.fetchedAt ? ageLabel(product.fetchedAt) : 'sebelumnya'}. Hubungkan internet untuk memeriksa versi terbaru.`}
           actionLabel={refreshing ? 'Memperbarui…' : 'Perbarui'}
           onAction={refresh}
         />
@@ -184,13 +186,15 @@ export function ProductDetailScreen({ route }: { route: { params: { productId: s
           </View>
         </View>
         <View style={styles.chips}>
-          {user ? <StatusChip status="Belum diverifikasi" /> : null}
+          {product.verification === 'UNVERIFIED' ? <StatusChip status="Belum diverifikasi" /> : null}
           <StatusChip status={completenessChip[product.completeness]} />
         </View>
         <ProvenanceLine product={product} />
       </View>
 
-      <NutritionTable product={product} />
+      {hasBasis ? <NutritionTable product={product} /> : (
+        <Banner type="info" title="Satuan data gizi belum tersedia" message="Anda dapat menambahkan produk sendiri dari informasi pada kemasan." />
+      )}
 
       <Pressable
         onPress={() => setExpanded((e) => !e)}

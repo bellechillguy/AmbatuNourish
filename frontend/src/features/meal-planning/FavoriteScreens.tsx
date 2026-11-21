@@ -31,6 +31,7 @@ import {
   useToast,
 } from '../../shared/components';
 import type { MealItem, MealSlot, NutrientKey, Product, ProductSummary } from '../../shared/domain/types';
+import { useSession } from '../../shared/state/SessionProvider';
 import { useAsync } from '../../shared/state/useAsync';
 import { colors, spacing } from '../../shared/theme';
 import { formatNumber } from '../../shared/utils/format';
@@ -45,7 +46,8 @@ const TOTAL_KEYS: NutrientKey[] = ['energy', 'sugar', 'sodium'];
 
 export function FavoriteDetailScreen({ route }: { route: { params: { favoriteId: string } } }) {
   const nav = useRootNav();
-  const fav = useAsync(() => mealPlanningService.getFavorite(route.params.favoriteId), [route.params.favoriteId]);
+  const { user } = useSession();
+  const fav = useAsync(() => mealPlanningService.getFavorite(route.params.favoriteId, user?.id), [route.params.favoriteId, user?.id]);
   useFocusEffect(
     useCallback(() => {
       void fav.reload();
@@ -141,6 +143,7 @@ export function FavoriteEditScreen({ route }: { route: { params?: { favoriteId?:
   const nav = useRootNav();
   const toast = useToast();
   const favoriteId = route.params?.favoriteId;
+  const { user } = useSession();
   const [name, setName] = useState('');
   const [note, setNote] = useState('');
   const [items, setItems] = useState<MealItem[]>([]);
@@ -154,19 +157,20 @@ export function FavoriteEditScreen({ route }: { route: { params?: { favoriteId?:
 
   useEffect(() => {
     if (favoriteId) {
-      void mealPlanningService.getFavorite(favoriteId).then((f) => {
+      void mealPlanningService.getFavorite(favoriteId, user?.id).then((f) => {
         setName(f.name);
         setNote(f.note ?? '');
         setItems(f.items);
         setSlotHint(f.slotHint);
-      });
+      }).catch((error) => setFormError(errorMessage(error)));
     } else if (route.params?.productId) {
       void catalogService.getProduct(route.params.productId).then((p) => {
         setName(p.name);
-        setItems([toItem(p)]);
-      });
+        if (p.basisKnown !== false) setItems([toItem(p)]);
+        else setErrors({ items: 'Satuan produk belum tersedia.' });
+      }).catch((error) => setFormError(errorMessage(error)));
     }
-  }, [favoriteId, route.params?.productId]);
+  }, [favoriteId, route.params?.productId, user?.id]);
 
   const openPortion = async (index: number) => {
     try {
@@ -236,6 +240,10 @@ export function FavoriteEditScreen({ route }: { route: { params?: { favoriteId?:
             visible={picker}
             onClose={() => setPicker(false)}
             onPick={(p) => {
+              if (p.basisKnown === false) {
+                toast({ message: 'Satuan produk belum tersedia.' });
+                return;
+              }
               setPicker(false);
               setItems((prev) => [...prev.filter((x) => x.productId !== p.id), toItem(p)]);
               setErrors((er) => ({ ...er, items: undefined }));
@@ -298,6 +306,7 @@ function toItem(p: Product): MealItem {
 
 function ItemPicker({ visible, onClose, onPick }: { visible: boolean; onClose: () => void; onPick: (p: Product) => void }) {
   const [query, setQuery] = useState('');
+  const toast = useToast();
   const results = useAsync<ProductSummary[]>(() => catalogService.search(query, 'ALL'), [query], { enabled: visible });
   return (
     <BottomSheet visible={visible} title="Tambah item" onClose={onClose}>
@@ -311,7 +320,7 @@ function ItemPicker({ visible, onClose, onPick }: { visible: boolean; onClose: (
             title={p.name}
             subtitle={p.brand}
             leading={<Tile tone={p.source === 'USER_ENTERED' ? 'user' : 'neutral'} />}
-            onPress={() => void catalogService.getProduct(p.id).then(onPick)}
+            onPress={() => void catalogService.getProduct(p.id).then(onPick).catch((error) => toast({ message: errorMessage(error) }))}
           />
         ))
       )}

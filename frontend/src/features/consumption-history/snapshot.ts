@@ -1,6 +1,7 @@
-import { emptyFacts, scaleFacts } from '../../shared/domain/nutrients';
+import { basisUnit, emptyFacts, scaleFacts } from '../../shared/domain/nutrients';
 import type { MealItem, NutrientFacts, NutrientKey, Product } from '../../shared/domain/types';
 import { catalogService } from '../../services/catalog';
+import { isOnline } from '../../services/network';
 
 /**
  * Salinan gizi untuk Catatan Konsumsi (BR-09). Dihitung dari basis kanonik per-100 × kuantitas.
@@ -29,15 +30,18 @@ export async function snapshotForItems(
   multiplier: number,
   cached: (id: string) => Product | undefined,
 ): Promise<NutrientFacts> {
-  const parts: NutrientFacts[] = [];
-  for (const it of items) {
-    let product: Product | undefined;
-    try {
-      product = await catalogService.getProduct(it.productId);
-    } catch {
-      product = cached(it.productId);
+  const parts = await Promise.all(items.map(async (item) => {
+    let product = cached(item.productId);
+    if (isOnline()) {
+      try {
+        product = await catalogService.getProduct(item.productId);
+      } catch {
+        // Gunakan cache lokal bila sumber sedang tidak tersedia.
+      }
     }
-    parts.push(product ? scaleFacts(product.nutrientsPer100, it.quantity * multiplier) : emptyFacts());
-  }
+    return product && product.basisKnown !== false && basisUnit(product.basis) === item.unit
+      ? scaleFacts(product.nutrientsPer100, item.quantity * multiplier)
+      : emptyFacts();
+  }));
   return sumFacts(parts);
 }

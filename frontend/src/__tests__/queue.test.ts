@@ -1,6 +1,6 @@
 import { emptyFacts } from '../shared/domain/nutrients';
 import type { ConsumptionRecord } from '../shared/domain/types';
-import { applyResults, backoffMs, emptySyncState, makeOp, markSyncing, readyOps, resolveConflict } from '../shared/sync/queue';
+import { applyResults, backoffMs, emptySyncState, enqueueChange, makeOp, markSyncing, mergePull, readyOps, resolveConflict } from '../shared/sync/queue';
 
 const record: ConsumptionRecord = {
   id: 'rec-1',
@@ -64,4 +64,30 @@ describe('antrean sinkronisasi offline', () => {
     expect(keepLocal.queue[0].baseVersion).toBe(3);
     expect(keepLocal.queue[0].status).toBe('PENDING');
   });
+  it('mengirim operasi berurutan dan memakai versi yang dikonfirmasi', () => {
+    const inserted = enqueueChange(emptySyncState, 'CONSUMPTION', record);
+    const edited = enqueueChange(inserted, 'CONSUMPTION', { ...record, title: 'Susu, 200 ml' });
+    expect(readyOps(edited.queue, Date.now())).toEqual([inserted.queue[0]]);
+    const next = applyResults(edited, [{ opId: inserted.queue[0].opId, status: 'ACCEPTED', version: 1 }], Date.now());
+    expect(next.queue[0].baseVersion).toBe(1);
+    expect(next.records[0].title).toBe('Susu, 200 ml');
+  });
+
+  it('mempertahankan penghapusan lokal saat pull dan mengizinkan urungkan setelah dikonfirmasi', () => {
+    const saved = { ...record, version: 1 };
+    const deleted = enqueueChange({ ...emptySyncState, records: [saved] }, 'CONSUMPTION', saved, true);
+    expect(mergePull(deleted, { plans: [], records: [saved] }).records).toEqual([]);
+    const confirmed = applyResults(deleted, [{ opId: deleted.queue[0].opId, status: 'ACCEPTED', version: 2 }], Date.now());
+    const restored = enqueueChange(confirmed, 'CONSUMPTION', saved);
+    expect(restored.queue[0]).toMatchObject({ op: 'UPDATE', baseVersion: 2 });
+  });
+
+  it('menghapus salinan lokal ketika pengguna memilih tombstone server', () => {
+    const { op, state } = stateWithOp();
+    const server = { ...record, version: 2, syncStatus: 'SYNCED' as const };
+    const conflicted = applyResults(state, [{ opId: op.opId, status: 'CONFLICT', server, deleted: true }], Date.now());
+    expect(resolveConflict(conflicted, op.opId, 'SERVER').records).toEqual([]);
+    expect(resolveConflict(conflicted, op.opId, 'LOCAL').queue[0]).toMatchObject({ op: 'UPDATE', baseVersion: 2 });
+  });
+
 });

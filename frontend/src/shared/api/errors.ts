@@ -55,7 +55,7 @@ export function errorMessage(e: unknown): string {
     case 'PARTNER_UNAVAILABLE':
       return 'Layanan mitra sedang tidak tersedia.';
     case 'CONTRACT_PENDING':
-      return 'Fitur ini menunggu kontrak API dari tim backend.';
+      return 'Fitur ini menunggu integrasi dengan layanan mitra.';
     case 'SERVER':
       return 'Terjadi gangguan di server. Coba lagi.';
     default:

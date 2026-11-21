@@ -43,7 +43,8 @@ export function CompareScreen() {
   const { compareIds, removeFromCompare, setCompare } = useCatalogLocal();
   const { fontScale } = useWindowDimensions();
   const cols = useAsync(() => assessmentService.compare(compareIds), [compareIds.join(',')]);
-  const data = cols.data ?? [];
+  const data = (cols.data ?? []).filter((column) => column.basisKnown !== false);
+  const withoutBasis = (cols.data ?? []).filter((column) => column.basisKnown === false);
 
   const counts = data.reduce<Record<FoodBasis, number>>((acc, c) => ({ ...acc, [c.basis]: acc[c.basis] + 1 }), { MASS: 0, VOLUME: 0 });
   const majority: FoodBasis = counts.VOLUME > counts.MASS ? 'VOLUME' : 'MASS';
@@ -63,6 +64,10 @@ export function CompareScreen() {
         actions={compareIds.length < 3 ? [{ icon: 'plus', label: 'Tambah produk', onPress: () => nav.navigate('SearchResults', { query: '' }) }] : []}
       />
 
+      {withoutBasis.length ? <Banner type="info" title="Produk tanpa satuan gizi tidak dapat dibandingkan"
+        message={withoutBasis.map((column) => column.name).join(', ')}
+        actionLabel="Hapus dari perbandingan"
+        onAction={() => setCompare(data.map((column) => column.productId))} /> : null}
       {cols.loading ? (
         <Skeleton width="100%" height={300} />
       ) : cols.error ? (

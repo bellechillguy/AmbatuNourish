@@ -5,10 +5,12 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { errorMessage } from '../../shared/api/errors';
 import { AppText, BottomSheet, Button, FilterChip, RadioRow, StatusChip, outcomeChip, useToast } from '../../shared/components';
 import { SLOT_LABEL, SLOT_ORDER } from '../../shared/domain/nutrients';
 import type { FavoriteMeal, MealItem, MealSlot, ProductSummary } from '../../shared/domain/types';
 import { useCatalogLocal } from '../../shared/state/CatalogLocalProvider';
+import { useSession } from '../../shared/state/SessionProvider';
 import { newId } from '../../shared/sync/queue';
 import { useOfflineData } from '../../shared/sync/OfflineDataProvider';
 import { spacing } from '../../shared/theme';
@@ -45,7 +47,8 @@ export function AddToSlotSheet({
 }) {
   const toast = useToast();
   const { savePlan, plans } = useOfflineData();
-  const { searchCache } = useCatalogLocal();
+  const { searchCache, cachedProduct, rememberProduct } = useCatalogLocal();
+  const { user } = useSession();
   const [slot, setSlot] = useState<MealSlot>(initialSlot);
   const [mode, setMode] = useState<'favorites' | 'search'>(prefill ? 'search' : 'favorites');
   const [favorites, setFavorites] = useState<FavoriteMeal[]>([]);
@@ -58,11 +61,14 @@ export function AddToSlotSheet({
     setSlot(initialSlot);
     setMode(prefill ? 'search' : 'favorites');
     setSelected(prefill ? `p:${prefill.id}` : favoriteId ? `f:${favoriteId}` : null);
-    void mealPlanningService.listFavorites().then((f) => {
+    let active = true;
+    void mealPlanningService.listFavorites(user?.id).then((f) => {
+      if (!active) return;
       setFavorites(f);
       if (!prefill && f[0]) setSelected((s) => s ?? `f:${f[0].id}`);
-    });
-  }, [visible, initialSlot, prefill, favoriteId]);
+    }).catch(() => { if (active) setFavorites([]); });
+    return () => { active = false; };
+  }, [visible, initialSlot, prefill, favoriteId, user?.id]);
 
   useEffect(() => {
     if (mode !== 'search' || !visible) return;
@@ -96,13 +102,19 @@ export function AddToSlotSheet({
       let quantity = fromPrefill?.quantity ?? 100;
       let unit: 'g' | 'ml' = fromPrefill?.unit ?? 'g';
       if (!fromPrefill) {
-        try {
-          const p = await catalogService.getProduct(id);
-          unit = p.basis === 'MASS' ? 'g' : 'ml';
-          quantity = p.serving && p.serving.unit === unit ? p.serving.quantity : 100;
-        } catch {
-          // offline: gunakan 100 g/ml sebagai kuantitas awal, dapat diubah di detail rencana
+        const product = await catalogService.getProduct(id).catch((error) => {
+          const cached = cachedProduct(id);
+          if (!cached) toast({ message: errorMessage(error) });
+          return cached;
+        });
+        if (!product) return;
+        if (product.basisKnown === false) {
+          toast({ message: 'Satuan produk belum tersedia.' });
+          return;
         }
+        rememberProduct(product);
+        unit = product.basis === 'MASS' ? 'g' : 'ml';
+        quantity = product.serving && product.serving.unit === unit ? product.serving.quantity : 100;
       }
       title = fromPrefill?.name ?? summary?.name ?? 'Produk';
       items = [{ productId: id, productName: title, quantity, unit, source: fromPrefill?.source ?? summary?.source ?? 'OPEN_FOOD_FACTS' }];

@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
+import { config } from '../api/config';
 import type { Product, ProductSummary } from '../domain/types';
 import { toSummary } from '../../services/catalog';
 import { useSession } from './SessionProvider';
@@ -34,11 +35,15 @@ interface Stored {
 export function CatalogLocalProvider({ children }: { children: ReactNode }) {
   const { user } = useSession();
   const [data, setData] = useState<Stored>({ cache: {}, recentIds: [], compareIds: [] });
-  const key = user ? userKey(user.id, 'catalog-local') : null;
+  const key = user ? userKey(user.id, config.useMock ? 'demo-catalog-local' : 'catalog-local') : null;
 
   useEffect(() => {
     if (!key) return;
-    void readJson<Stored>(key, { cache: {}, recentIds: [], compareIds: [] }).then(setData);
+    let active = true;
+    void readJson<Stored>(key, { cache: {}, recentIds: [], compareIds: [] }).then((stored) => {
+      if (active) setData(stored);
+    });
+    return () => { active = false; };
   }, [key]);
 
   const update = useCallback(
@@ -58,7 +63,7 @@ export function CatalogLocalProvider({ children }: { children: ReactNode }) {
       rememberProduct(p) {
         update((d) => ({
           ...d,
-          cache: { ...d.cache, [p.id]: { ...p, isStale: false } },
+          cache: { ...d.cache, [p.id]: p },
           recentIds: [p.id, ...d.recentIds.filter((x) => x !== p.id)].slice(0, 10),
         }));
       },

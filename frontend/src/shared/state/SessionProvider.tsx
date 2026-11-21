@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
+import { AppError } from '../api/errors';
 import { setAuthToken, setUnauthorizedHandler } from '../api/http';
 import type { Session, UserProfile } from '../domain/types';
 import { identityService, type RegisterInput } from '../../services/identity';
@@ -74,10 +75,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       },
       async logout(opts) {
         const userId = session?.user.id;
-        await identityService.logout();
-        if (userId && opts?.clearLocal !== false) await clearUserData(userId);
+        try {
+          await identityService.logout();
+        } catch (error) {
+          if (!(error instanceof AppError) || !['OFFLINE', 'TIMEOUT', 'UNAUTHORIZED'].includes(error.kind)) throw error;
+        }
         setJustRegistered(false);
         await persist(null);
+        if (userId && opts?.clearLocal !== false) await clearUserData(userId);
       },
       async updateProfile(name) {
         if (!session) return;

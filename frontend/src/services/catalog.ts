@@ -4,7 +4,7 @@
  */
 import { config } from '../shared/api/config';
 import { AppError } from '../shared/api/errors';
-import { pbString, request, type ListResponse } from '../shared/api/http';
+import { request } from '../shared/api/http';
 import { emptyFacts } from '../shared/domain/nutrients';
 import type { ManualProductInput, NutrientKey, Product, ProductSummary } from '../shared/domain/types';
 import { DEMO_BARCODE_NOT_FOUND, demoProducts } from './fixtures';
@@ -14,7 +14,7 @@ export type SourceFilter = 'ALL' | 'OPEN_FOOD_FACTS' | 'USER_ENTERED';
 
 export interface CatalogService {
   lookupBarcode(barcode: string): Promise<Product | null>;
-  search(query: string, filter: SourceFilter): Promise<ProductSummary[]>;
+  search(query: string, filter: SourceFilter, discover?: boolean): Promise<ProductSummary[]>;
   getProduct(id: string): Promise<Product>;
   listMyProducts(): Promise<ProductSummary[]>;
   createManualProduct(input: ManualProductInput): Promise<Product>;
@@ -59,24 +59,19 @@ function buildManual(id: string, input: ManualProductInput, createdAt: string): 
   };
 }
 
-/* ---------- HTTP ---------- */
-/**
- * Baca produk memakai endpoint gateway yang SUDAH ADA (/api/products, /api/products/:id).
- * Bentuk DTO kanonik (nutrientsPer100, completeness, provenance) masih PENDING di kontrak
- * Food Catalog — mapper di bawah mengharapkan backend mengirim field tsb apa adanya.
- * Produk manual pribadi belum punya endpoint → CONTRACT_PENDING.
- */
 class HttpCatalogService implements CatalogService {
   async lookupBarcode(barcode: string): Promise<Product | null> {
-    const res = await request<ListResponse<Product>>('/products', { query: { filter: `barcode=${pbString(barcode)}`, perPage: 1 } });
-    return res.items[0] ? normalize(res.items[0]) : null;
+    try {
+      return normalize(await request<Product>(`/products/barcode/${encodeURIComponent(barcode)}`));
+    } catch (error) {
+      if (error instanceof AppError && error.kind === 'NOT_FOUND') return null;
+      throw error;
+    }
   }
 
-  async search(query: string, filter: SourceFilter): Promise<ProductSummary[]> {
-    const clauses = [`(name~${pbString(query)} || brand~${pbString(query)} || barcode=${pbString(query)})`];
-    if (filter !== 'ALL') clauses.push(`source=${pbString(filter)}`);
-    const res = await request<ListResponse<Product>>('/products', { query: { filter: clauses.join(' && '), perPage: 30 } });
-    return res.items.map((p) => toSummary(normalize(p)));
+  async search(query: string, filter: SourceFilter, discover = false): Promise<ProductSummary[]> {
+    const products = await request<Product[]>('/products', { query: { q: query.trim(), source: filter, discover: discover ? '1' : undefined } });
+    return products.map((product) => toSummary(normalize(product)));
   }
 
   async getProduct(id: string): Promise<Product> {
@@ -84,23 +79,28 @@ class HttpCatalogService implements CatalogService {
   }
 
   async listMyProducts(): Promise<ProductSummary[]> {
-    throw new AppError('CONTRACT_PENDING');
+    const products: ProductSummary[] = [];
+    for (let page = 1; ; page += 1) {
+      const batch = await request<Product[]>('/manual-products', { query: { page } });
+      products.push(...batch.map((product) => toSummary(normalize(product))));
+      if (batch.length < 30) return products;
+    }
   }
 
-  async createManualProduct(): Promise<Product> {
-    throw new AppError('CONTRACT_PENDING');
+  async createManualProduct(input: ManualProductInput): Promise<Product> {
+    return normalize(await request<Product>('/manual-products', { method: 'POST', body: input }));
   }
 
-  async updateManualProduct(): Promise<Product> {
-    throw new AppError('CONTRACT_PENDING');
+  async updateManualProduct(id: string, input: ManualProductInput): Promise<Product> {
+    return normalize(await request<Product>(`/manual-products/${encodeURIComponent(id)}`, { method: 'PUT', body: input }));
   }
 
-  async deleteManualProduct(): Promise<void> {
-    throw new AppError('CONTRACT_PENDING');
+  deleteManualProduct(id: string): Promise<void> {
+    return request(`/manual-products/${encodeURIComponent(id)}`, { method: 'DELETE' });
   }
 
   async refresh(id: string): Promise<Product> {
-    return this.getProduct(id);
+    return normalize(await request<Product>(`/products/${encodeURIComponent(id)}/refresh`, { method: 'POST' }));
   }
 }
 

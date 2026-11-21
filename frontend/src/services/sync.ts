@@ -1,10 +1,8 @@
 /**
  * Sinkronisasi offline untuk Meal Planning & Consumption History (FR-OFF, requirements §7.10).
- * Bentuk antrean, idempotency key, versioning, dan strategi konflik harus disepakati di kontrak
- * backend — tipe di bawah adalah bentuk minimum yang dibutuhkan UI.
  */
 import { config } from '../shared/api/config';
-import { AppError } from '../shared/api/errors';
+import { request } from '../shared/api/http';
 import type { ConsumptionRecord, MealPlanEntry } from '../shared/domain/types';
 import { buildDemoPlans, buildDemoRecords } from './fixtures';
 import { delay, ensureOnline } from './network';
@@ -25,13 +23,15 @@ export interface QueuedOperation {
   attempts: number;
   nextAttemptAt?: number;
   lastError?: string;
+  rejected?: boolean;
+  previous?: MealPlanEntry | ConsumptionRecord;
 }
 
 export type OpResult =
   | { opId: string; status: 'ACCEPTED'; version: number }
   | { opId: string; status: 'REJECTED'; reason: string }
   | { opId: string; status: 'RETRYABLE'; reason: string }
-  | { opId: string; status: 'CONFLICT'; server: MealPlanEntry | ConsumptionRecord };
+  | { opId: string; status: 'CONFLICT'; server: MealPlanEntry | ConsumptionRecord; deleted?: boolean };
 
 export interface SyncService {
   pull(): Promise<{ plans: MealPlanEntry[]; records: ConsumptionRecord[] }>;
@@ -39,11 +39,15 @@ export interface SyncService {
 }
 
 class HttpSyncService implements SyncService {
-  async pull(): Promise<{ plans: MealPlanEntry[]; records: ConsumptionRecord[] }> {
-    throw new AppError('CONTRACT_PENDING');
+  pull(): Promise<{ plans: MealPlanEntry[]; records: ConsumptionRecord[] }> {
+    return request('/sync');
   }
-  async push(): Promise<OpResult[]> {
-    throw new AppError('CONTRACT_PENDING');
+
+  push(ops: QueuedOperation[]): Promise<OpResult[]> {
+    const operations = ops.map(({ opId, entityType, entityId, op, baseVersion, payload }) => ({
+      opId, entityType, entityId, op, baseVersion, payload,
+    }));
+    return request('/sync', { method: 'POST', body: { operations } });
   }
 }
 
@@ -51,13 +55,15 @@ class HttpSyncService implements SyncService {
 export const syncDemoFlags = { nextPlanConflict: false, failNext: false };
 
 class MockSyncService implements SyncService {
+  private plans = buildDemoPlans();
+  private records = buildDemoRecords();
   /** Mensimulasikan idempotensi server: opId yang sama mengembalikan hasil sebelumnya. */
   private seen = new Map<string, OpResult>();
 
   async pull() {
     await delay(300);
     ensureOnline();
-    return { plans: buildDemoPlans(), records: buildDemoRecords() };
+    return { plans: this.plans.slice(), records: this.records.slice() };
   }
 
   async push(ops: QueuedOperation[]): Promise<OpResult[]> {
@@ -75,13 +81,20 @@ class MockSyncService implements SyncService {
       if (syncDemoFlags.nextPlanConflict && op.entityType === 'MEAL_PLAN' && op.payload) {
         syncDemoFlags.nextPlanConflict = false;
         const local = op.payload as MealPlanEntry;
-        result = {
-          opId: op.opId,
-          status: 'CONFLICT',
-          server: { ...local, title: 'Nasi merah, ayam panggang, salad', version: local.version + 1, syncStatus: 'SYNCED' },
-        };
+        const server = { ...local, title: 'Nasi merah, ayam panggang, salad', version: local.version + 1, syncStatus: 'SYNCED' as const };
+        this.plans = [...this.plans.filter((plan) => plan.id !== local.id), server];
+        result = { opId: op.opId, status: 'CONFLICT', server };
       } else {
-        result = { opId: op.opId, status: 'ACCEPTED', version: op.baseVersion + 1 };
+        const version = op.baseVersion + 1;
+        const payload = op.payload ? { ...op.payload, version, syncStatus: 'SYNCED' as const } : null;
+        if (op.entityType === 'MEAL_PLAN') {
+          this.plans = this.plans.filter((plan) => plan.id !== op.entityId);
+          if (payload && 'slot' in payload) this.plans.push(payload);
+        } else {
+          this.records = this.records.filter((record) => record.id !== op.entityId);
+          if (payload && 'snapshot' in payload) this.records.push(payload);
+        }
+        result = { opId: op.opId, status: 'ACCEPTED', version };
       }
       this.seen.set(op.opId, result);
       return result;

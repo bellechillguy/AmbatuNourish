@@ -34,27 +34,29 @@ export function SearchResultsScreen({ route }: { route: { params: { query: strin
   const root = useRootNav();
   const { searchCache } = useCatalogLocal();
   const [input, setInput] = useState(route.params.query);
-  const [query, setQuery] = useState(route.params.query);
+  const [submitted, setSubmitted] = useState({ query: route.params.query, revision: 0 });
   const [filter, setFilter] = useState<SourceFilter>(route.params.filter ?? 'ALL');
-
-  // Debounce ~300 ms (PROPOSED).
+  const { query } = submitted;
   useEffect(() => {
-    const t = setTimeout(() => setQuery(input.trim()), 300);
-    return () => clearTimeout(t);
-  }, [input]);
-
-  const results = useAsync(() => catalogService.search(query, filter), [query, filter]);
+    setInput(route.params.query);
+    setSubmitted((current) => current.query === route.params.query ? current : { query: route.params.query, revision: current.revision + 1 });
+    setFilter(route.params.filter ?? 'ALL');
+  }, [route.params.query, route.params.filter]);
+  const submit = () => setSubmitted((current) => ({ query: input.trim(), revision: current.revision + 1 }));
+  const results = useAsync(() => catalogService.search(query, filter, true), [query, filter, submitted.revision]);
   const openProduct = (id: string) => root.navigate('ProductDetail', { productId: id });
   const addProduct = () => root.navigate('ManualProductForm', { name: query || undefined });
 
-  const offline = results.error && (results.error.kind === 'OFFLINE' || results.error.kind === 'TIMEOUT' || results.error.kind === 'SERVER');
-  const cached = offline ? searchCache(query) : [];
+  const offline = results.error && (results.error.kind === 'OFFLINE' || results.error.kind === 'TIMEOUT' || results.error.kind === 'SERVER' || results.error.kind === 'PARTNER_UNAVAILABLE' || results.error.kind === 'RATE_LIMITED');
+  const cached = offline ? searchCache(query).filter((product) => filter === 'ALL' || product.source === filter) : [];
   const items = results.data ?? [];
 
   return (
     <Screen inTabs gap={spacing.m}>
       <TopAppBar onLeading={() => nav.goBack()} />
-      <SearchField value={input} onChangeText={setInput} autoFocus={!route.params.query && !route.params.filter} />
+      <SearchField value={input} onChangeText={setInput} onSubmitEditing={submit} autoFocus={!route.params.query && !route.params.filter} />
+
+      {input.trim() !== query ? <Button label="Cari" icon="search" type="secondary" onPress={submit} /> : null}
 
       {offline ? (
         <>
@@ -72,6 +74,7 @@ export function SearchResultsScreen({ route }: { route: { params: { query: strin
             </>
           ) : null}
           <Button label="Coba lagi" icon="refresh" type="secondary" onPress={results.reload} />
+          <Button label="Tambahkan produk" icon="plus" type="tertiary" onPress={addProduct} />
         </>
       ) : (
         <>

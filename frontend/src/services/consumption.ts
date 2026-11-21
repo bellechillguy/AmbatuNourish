@@ -3,23 +3,32 @@
  * Catatan konsumsi sendiri dikelola offline-first (OfflineDataProvider + sync).
  */
 import { config } from '../shared/api/config';
-import type { SummaryMetric, SummaryTarget } from '../shared/domain/types';
+import { request } from '../shared/api/http';
+import type { DailySummary, SummaryMetric, SummaryTarget } from '../shared/domain/types';
 import { demoPlanRules } from './fixtures';
 import { delay } from './network';
 
+type ServerSummary = DailySummary & { incompleteCount: number };
+
 export interface ConsumptionService {
+  getDailySummary(date: string, timezone: string): Promise<ServerSummary | null>;
   /** Target harian dari Nutrition Plan aktif atau target pengguna. Kosong = tanpa target (L2). */
   getDailyTargets(): Promise<Partial<Record<SummaryMetric, SummaryTarget>>>;
 }
 
 class HttpConsumptionService implements ConsumptionService {
-  async getDailyTargets() {
-    // Kontrak target (Nutrition Plan Ambatufit) masih PENDING → tanpa target, tanpa progress indicator.
-    return {};
+  getDailySummary(date: string, timezone: string): Promise<ServerSummary> {
+    return request('/consumption/daily-summary', { query: { date, timezone } });
+  }
+
+  getDailyTargets(): Promise<Partial<Record<SummaryMetric, SummaryTarget>>> {
+    return request('/consumption/daily-targets');
   }
 }
 
 class MockConsumptionService implements ConsumptionService {
+  async getDailySummary() { return null; }
+
   /** Demo: setel ke false untuk melihat L2 (tanpa target). */
   hasPlan = true;
   async getDailyTargets() {

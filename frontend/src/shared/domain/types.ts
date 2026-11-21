@@ -43,6 +43,8 @@ export interface Product {
   brand?: string;
   barcode?: string;
   basis: FoodBasis;
+  /** false bila sumber belum menyatakan satuan data gizi. */
+  basisKnown?: boolean;
   /** Hanya bila sumber mencantumkan & konversinya valid (FR-ASMT-04). */
   serving?: ServingSize;
   nutrientsPer100: NutrientFacts;
@@ -59,6 +61,13 @@ export interface Product {
   createdAt?: string;
   /** true bila disajikan dari cache melewati jendela kesegaran (diisi backend / cache). */
   isStale?: boolean;
+  provenance?: {
+    externalId: string;
+    sourceUrl: string;
+    sourceVersion?: string;
+    sourceUpdatedAt?: string;
+    sourceBasis?: string;
+  };
 }
 
 export interface ProductSummary {
@@ -109,6 +118,7 @@ export interface Assessment {
   portion: Portion;
   completeness: Completeness;
   evidence: EvidenceItem[];
+  missingFields?: NutrientKey[];
 }
 
 export type PreferenceType = 'SUGAR_MAX_PER_PORTION' | 'SODIUM_MAX_PER_PORTION' | 'AVOID_INGREDIENTS';
@@ -148,6 +158,7 @@ export interface RuleConflict {
 
 export interface ComparisonColumn {
   productId: string;
+  basisKnown?: boolean;
   name: string;
   brand?: string;
   basis: FoodBasis;

@@ -8,7 +8,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { useRootNav, type LogFormParams } from '../../app/navigation/types';
-import { errorMessage } from '../../shared/api/errors';
+import { AppError, errorMessage } from '../../shared/api/errors';
 import {
   ActionBar,
   AppText,
@@ -32,6 +32,7 @@ import {
 import { SLOT_LABEL, basisUnit, scaleFacts } from '../../shared/domain/nutrients';
 import type { ConsumptionRecord, FavoriteMeal, NutrientFacts, NutrientKey, Product, ProductSummary } from '../../shared/domain/types';
 import { useCatalogLocal } from '../../shared/state/CatalogLocalProvider';
+import { useSession } from '../../shared/state/SessionProvider';
 import { useAsync } from '../../shared/state/useAsync';
 import { newId } from '../../shared/sync/queue';
 import { useOfflineData } from '../../shared/sync/OfflineDataProvider';
@@ -52,7 +53,8 @@ export function LogSourceScreen({ route }: { route: { params?: { date?: string }
   const date = route.params?.date;
   const { plans, records } = useOfflineData();
   const [query, setQuery] = useState('');
-  const favs = useAsync(() => mealPlanningService.listFavorites(), []);
+  const { user } = useSession();
+  const favs = useAsync(() => mealPlanningService.listFavorites(user?.id), [user?.id]);
   const search = useAsync<ProductSummary[]>(
     () => (query.trim() ? catalogService.search(query, 'ALL') : Promise.resolve([])),
     [query],
@@ -153,6 +155,7 @@ export function LogFormScreen({ route }: { route: { params: LogFormParams } }) {
   const params = route.params;
   const { records, saveRecord, deleteRecord } = useOfflineData();
   const { cachedProduct } = useCatalogLocal();
+  const { user } = useSession();
   const existing = params.recordId ? records.find((r) => r.id === params.recordId) : undefined;
   const editing = !!existing;
 
@@ -178,7 +181,7 @@ export function LogFormScreen({ route }: { route: { params: LogFormParams } }) {
   useEffect(() => {
     if (existing) {
       setQtyText(toInputText(existing.quantity));
-      if (existing.itemsCount > 1 || existing.source === 'FAVORITE' || existing.source === 'PLAN') setMultiplier(existing.quantity);
+      if (existing.itemsCount > 1 || existing.source === 'FAVORITE') setMultiplier(existing.quantity);
       return;
     }
     if (params.productId) {
@@ -187,9 +190,13 @@ export function LogFormScreen({ route }: { route: { params: LogFormParams } }) {
         .catch(() => {
           const c = cachedProduct(params.productId!);
           if (c) return c;
-          throw new Error('unavailable');
+          throw new AppError('OFFLINE');
         })
         .then((p) => {
+          if (p.basisKnown === false) {
+            setLoadError('Satuan gizi belum tersedia. Gunakan data pada kemasan untuk menambahkan produk sendiri.');
+            return;
+          }
           setProduct(p);
           const unit = basisUnit(p.basis);
           setQtyText(toInputText(params.quantity ?? (p.serving && p.serving.unit === unit ? p.serving.quantity : 100)));
@@ -197,19 +204,24 @@ export function LogFormScreen({ route }: { route: { params: LogFormParams } }) {
         .catch((e) => setLoadError(errorMessage(e)));
     } else if (params.favoriteId) {
       mealPlanningService
-        .getFavorite(params.favoriteId)
+        .getFavorite(params.favoriteId, user?.id)
         .then(setFavorite)
         .catch((e) => setLoadError(errorMessage(e)));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.productId, params.favoriteId, params.recordId]);
+  }, [params.productId, params.favoriteId, params.recordId, user?.id]);
 
   useEffect(() => {
-    if (favorite) void snapshotForItems(favorite.items, multiplier, cachedProduct).then(setFavSnapshot);
+    let active = true;
+    setFavSnapshot(null);
+    if (favorite) void snapshotForItems(favorite.items, multiplier, cachedProduct).then((snapshot) => {
+      if (active) setFavSnapshot(snapshot);
+    });
+    return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [favorite, multiplier]);
 
-  const isMeal = !!favorite || (existing ? existing.itemsCount > 1 || existing.source === 'FAVORITE' || existing.source === 'PLAN' : false);
+  const isMeal = !!favorite || (existing ? existing.itemsCount > 1 || existing.source === 'FAVORITE' : false);
   const unit = product ? basisUnit(product.basis) : existing?.unit ?? 'g';
   const qty = parseDecimal(qtyText);
 
@@ -217,10 +229,12 @@ export function LogFormScreen({ route }: { route: { params: LogFormParams } }) {
   const snapshot: NutrientFacts | null = useMemo(() => {
     if (existing) {
       if (isMeal) {
+        if (multiplier === existing.quantity) return existing.snapshot;
         const ratio = existing.quantity ? multiplier / existing.quantity : 1;
         return scaleFacts(existing.snapshot, ratio * 100);
       }
       if (qty === null || Number.isNaN(qty) || !existing.quantity) return null;
+      if (qty === existing.quantity) return existing.snapshot;
       // Hitung ulang dari basis per-100 yang tersimpan di snapshot catatan ini.
       const per100 = scaleFacts(existing.snapshot, (100 / existing.quantity) * 100);
       return scaleFacts(per100, qty);
@@ -320,7 +334,7 @@ export function LogFormScreen({ route }: { route: { params: LogFormParams } }) {
           <Dialog
             visible={confirmDelete}
             title="Hapus catatan ini?"
-            message={`${existing.title} (${formatTime(existing.consumedAt)}) akan dihapus dari riwayat dan ringkasan ${relativeDayLabel(toDateKey(new Date(existing.consumedAt))).toLowerCase()}. Rencana makan tidak berubah.`}
+            message={`${existing.title} (${formatTime(existing.consumedAt)}) akan dihapus dari riwayat dan ringkasan ${relativeDayLabel(toDateKey(new Date(existing.consumedAt))).toLowerCase()}. Jika catatan berasal dari rencana, status rencana kembali menjadi direncanakan.`}
             onDismiss={() => setConfirmDelete(false)}
           >
             <Button label="Hapus catatan" icon="trash" type="destructive" onPress={remove} />

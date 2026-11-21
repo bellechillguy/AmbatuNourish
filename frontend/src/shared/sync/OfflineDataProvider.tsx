@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { config } from '../api/config';
 import { AppState } from 'react-native';
 
 import type { ConsumptionRecord, MealPlanEntry, SyncStatus } from '../domain/types';
@@ -9,13 +10,13 @@ import { readJson, userKey, writeJson } from '../state/storage';
 import {
   applyResults,
   emptySyncState,
+  enqueueChange,
+  findEntity,
   failBatch,
   globalStatus,
-  makeOp,
   markSyncing,
   readyOps,
-  removeEntity,
-  replaceEntity,
+  mergePull,
   resolveConflict as resolveConflictPure,
   type ConflictItem,
   type SyncState,
@@ -52,115 +53,104 @@ export function OfflineDataProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const stateRef = useRef(state);
-  stateRef.current = state;
   const syncingRef = useRef(false);
+  const active = useRef(false);
   const onlineRef = useRef(online);
   onlineRef.current = online;
+  const storageKey = user ? userKey(user.id, config.useMock ? 'demo-offline-data' : 'offline-data') : null;
 
-  const storageKey = user ? userKey(user.id, 'offline-data') : null;
+  const commit = useCallback((fn: (s: SyncState) => SyncState) => {
+    stateRef.current = fn(stateRef.current);
+    setState(stateRef.current);
+  }, []);
 
-  /* ---- Muat dari perangkat, lalu tarik dari server bila kosong ---- */
   useEffect(() => {
+    active.current = true;
     let cancelled = false;
-    setLoaded(false);
-    if (!storageKey) {
-      setState(emptySyncState);
-      return;
-    }
-    (async () => {
-      const stored = await readJson<SyncState | null>(storageKey, null);
-      if (cancelled) return;
-      if (stored) {
-        // Operasi yang terputus saat SYNCING dikembalikan ke PENDING.
-        setState({ ...stored, queue: stored.queue.map((o) => (o.status === 'SYNCING' ? { ...o, status: 'PENDING' } : o)) });
+    if (storageKey) {
+      void readJson<SyncState>(storageKey, emptySyncState).then((stored) => {
+        if (cancelled) return;
+        commit(() => ({ ...stored, queue: stored.queue.map((op) =>
+          op.status === 'SYNCING' ? { ...op, status: 'PENDING' } : op,
+        ) }));
         setLoaded(true);
-        return;
-      }
-      try {
-        const { plans, records } = await syncService.pull();
-        if (!cancelled) setState({ ...emptySyncState, plans, records, lastSyncedAt: new Date().toISOString() });
-      } catch {
-        // Offline / kontrak pending: mulai kosong, data lokal tetap bisa dibuat.
-      }
-      if (!cancelled) setLoaded(true);
-    })();
+      });
+    }
     return () => {
       cancelled = true;
+      active.current = false;
     };
-  }, [storageKey]);
+  }, [commit, storageKey]);
 
-  /* ---- Persistensi ---- */
   useEffect(() => {
     if (storageKey && loaded) void writeJson(storageKey, state);
   }, [state, storageKey, loaded]);
 
-  const commit = useCallback((fn: (s: SyncState) => SyncState) => {
-    setState((s) => {
-      const next = fn(s);
-      stateRef.current = next;
-      return next;
-    });
-  }, []);
-
-  /* ---- Sinkronisasi ---- */
   const runSync = useCallback(
-    async (force: boolean, onlyOpId?: string) => {
-      if (syncingRef.current || !onlineRef.current) return;
-      const now = Date.now();
-      let batch = readyOps(stateRef.current.queue, now, force);
-      if (onlyOpId) batch = batch.filter((o) => o.opId === onlyOpId);
-      if (batch.length === 0) return;
-      const ids = batch.map((o) => o.opId);
+    async (force: boolean, onlyOpId?: string, refresh = false) => {
+      if (!active.current || !loaded || syncingRef.current || !onlineRef.current) return;
+      const getBatch = (immediate = false) => readyOps(stateRef.current.queue, Date.now(), immediate)
+        .filter((op) => !onlyOpId || op.opId === onlyOpId).slice(0, 20);
+      let batch = getBatch(force);
+      if (!batch.length && !refresh) return;
       syncingRef.current = true;
       setSyncing(true);
-      commit((s) => markSyncing(s, ids));
       try {
-        const results = await syncService.push(batch);
-        commit((s) => applyResults(s, results, Date.now()));
+        while (batch.length && active.current && onlineRef.current) {
+          const ids = batch.map((op) => op.opId);
+          commit((current) => markSyncing(current, ids));
+          try {
+            const results = await syncService.push(batch);
+            if (!active.current) return;
+            commit((current) => {
+              const next = applyResults(current, results, Date.now());
+              const returned = new Set(results.map((result) => result.opId));
+              return failBatch(next, ids.filter((id) => !returned.has(id)), 'Respons sinkronisasi tidak lengkap', Date.now());
+            });
+          } catch {
+            if (active.current) commit((current) => failBatch(current, ids, 'server tidak merespons', Date.now()));
+            break;
+          }
+          batch = getBatch();
+        }
+        if (!active.current || !onlineRef.current) return;
+        const remote = await syncService.pull();
+        if (active.current) commit((current) => mergePull(current, remote));
       } catch {
-        commit((s) => failBatch(s, ids, 'server tidak merespons', Date.now()));
+        // Cache dan antrean tetap tersedia ketika pengambilan data gagal.
       } finally {
         syncingRef.current = false;
-        setSyncing(false);
+        if (active.current) setSyncing(false);
       }
     },
-    [commit],
+    [commit, loaded],
   );
 
-  // Kirim otomatis saat koneksi pulih dan saat aplikasi kembali aktif.
   useEffect(() => {
-    if (online && loaded) void runSync(false);
+    if (online && loaded) void runSync(false, undefined, true);
   }, [online, loaded, runSync]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => {
-      if (s === 'active') void runSync(false);
+      if (s === 'active') void runSync(false, undefined, true);
     });
     return () => sub.remove();
   }, [runSync]);
 
-  // Retry berkala untuk operasi yang menunggu backoff.
   useEffect(() => {
-    const t = setInterval(() => void runSync(false), 15_000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => void runSync(false), 15_000);
+    return () => clearInterval(timer);
   }, [runSync]);
 
   const scheduleSync = useCallback(() => {
     setTimeout(() => void runSync(false), 800);
   }, [runSync]);
 
-  /* ---- Mutasi ---- */
-  const localStatus = (): SyncStatus => (onlineRef.current ? 'PENDING' : 'LOCAL');
-
   const upsert = useCallback(
     (type: EntityType, entity: MealPlanEntry | ConsumptionRecord) => {
-      const prev =
-        type === 'MEAL_PLAN'
-          ? stateRef.current.plans.find((p) => p.id === entity.id)
-          : stateRef.current.records.find((r) => r.id === entity.id);
-      const withStatus = { ...entity, syncStatus: localStatus() } as MealPlanEntry | ConsumptionRecord;
-      const op = makeOp(type, prev ? 'UPDATE' : 'CREATE', withStatus);
-      commit((s) => ({ ...replaceEntity(s, type, withStatus), queue: [...s.queue, op] }));
+      const prev = findEntity(stateRef.current, type, entity.id);
+      const status: SyncStatus = onlineRef.current ? 'PENDING' : 'LOCAL';
+      commit((current) => enqueueChange(current, type, { ...entity, syncStatus: status }));
       scheduleSync();
       return prev;
     },
@@ -169,13 +159,11 @@ export function OfflineDataProvider({ children }: { children: ReactNode }) {
 
   const remove = useCallback(
     (type: EntityType, id: string) => {
-      const prev =
-        type === 'MEAL_PLAN' ? stateRef.current.plans.find((p) => p.id === id) : stateRef.current.records.find((r) => r.id === id);
-      if (!prev) return undefined;
-      const op = makeOp(type, 'DELETE', prev);
-      commit((s) => ({ ...removeEntity(s, type, id), queue: [...s.queue, op] }));
+      const previous = findEntity(stateRef.current, type, id);
+      if (!previous) return undefined;
+      commit((current) => enqueueChange(current, type, previous, true));
       scheduleSync();
-      return prev;
+      return previous;
     },
     [commit, scheduleSync],
   );
@@ -185,9 +173,16 @@ export function OfflineDataProvider({ children }: { children: ReactNode }) {
       if (prev) upsert(type, prev);
       else remove(type, id);
     };
+    const consumed = new Map(state.records.filter((record) => !!record.planEntryId).map((record) => [record.planEntryId, record.consumedAt]));
+    const plans = state.plans.map((plan): MealPlanEntry => {
+      const time = consumed.get(plan.id);
+      if (time) return { ...plan, status: 'CONSUMED', consumedAt: time };
+      return config.useMock && !state.queue.some((op) => op.op === 'DELETE' && op.previous && 'snapshot' in op.previous &&
+        op.previous.planEntryId === plan.id) ? plan : { ...plan, status: 'PLANNED', consumedAt: undefined };
+    });
     return {
       loaded,
-      plans: state.plans,
+      plans,
       records: state.records,
       queue: state.queue,
       queueSize: state.queue.length,
@@ -206,14 +201,12 @@ export function OfflineDataProvider({ children }: { children: ReactNode }) {
         };
       },
       markConsumed(planId, record) {
-        const plan = stateRef.current.plans.find((p) => p.id === planId);
-        if (!plan) return () => undefined;
-        const prevPlan = upsert('MEAL_PLAN', { ...plan, status: 'CONSUMED', consumedAt: record.consumedAt });
+        const current = stateRef.current;
+        if (!findEntity(current, 'MEAL_PLAN', planId) || current.records.some((item) => item.planEntryId === planId)) {
+          return () => undefined;
+        }
         upsert('CONSUMPTION', { ...record, planEntryId: planId });
-        return () => {
-          if (prevPlan) upsert('MEAL_PLAN', prevPlan);
-          remove('CONSUMPTION', record.id);
-        };
+        return () => { remove('CONSUMPTION', record.id); };
       },
       saveRecord(record) {
         const prev = upsert('CONSUMPTION', record);
@@ -225,7 +218,7 @@ export function OfflineDataProvider({ children }: { children: ReactNode }) {
           if (prev) upsert('CONSUMPTION', prev);
         };
       },
-      syncNow: () => runSync(true),
+      syncNow: () => runSync(true, undefined, true),
       retry: (opId) => runSync(true, opId),
       resolveConflict(opId, choice) {
         commit((s) => resolveConflictPure(s, opId, choice));

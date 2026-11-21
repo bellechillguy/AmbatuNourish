@@ -4,8 +4,10 @@
  */
 import { config } from '../shared/api/config';
 import { AppError } from '../shared/api/errors';
+import { request } from '../shared/api/http';
 import type { FavoriteMeal, MealPlanEntry, Restaurant } from '../shared/domain/types';
 import { computeTotals, demoFavorites, demoRestaurants } from './fixtures';
+import { readJson, userKey, writeJson } from '../shared/state/storage';
 import { delay, ensureOnline } from './network';
 
 export interface LocationQuery {
@@ -16,8 +18,8 @@ export interface LocationQuery {
 }
 
 export interface MealPlanningService {
-  listFavorites(): Promise<FavoriteMeal[]>;
-  getFavorite(id: string): Promise<FavoriteMeal>;
+  listFavorites(userId?: string): Promise<FavoriteMeal[]>;
+  getFavorite(id: string, userId?: string): Promise<FavoriteMeal>;
   saveFavorite(fav: Omit<FavoriteMeal, 'id' | 'totals' | 'completeness' | 'outcome'> & { id?: string }): Promise<FavoriteMeal>;
   deleteFavorite(id: string): Promise<void>;
   /** Ambatueat lewat backend/ACL — kontrak lokasi & hasil PENDING. */
@@ -26,26 +28,59 @@ export interface MealPlanningService {
 }
 
 class HttpMealPlanningService implements MealPlanningService {
-  private pending(): never {
-    throw new AppError('CONTRACT_PENDING');
+  private async cachedFavorites(userId?: string): Promise<FavoriteMeal[] | null> {
+    return userId ? readJson<FavoriteMeal[] | null>(userKey(userId, 'favorite-list'), null) : null;
   }
-  async listFavorites(): Promise<FavoriteMeal[]> {
-    return this.pending();
+
+  async listFavorites(userId?: string): Promise<FavoriteMeal[]> {
+    try {
+      const favorites: FavoriteMeal[] = [];
+      for (let page = 1; ; page += 1) {
+        const batch = await request<FavoriteMeal[]>('/favorites', { query: { page } });
+        favorites.push(...batch);
+        if (batch.length < 50) break;
+      }
+      if (userId) await writeJson(userKey(userId, 'favorite-list'), favorites);
+      return favorites;
+    } catch (error) {
+      if (error instanceof AppError && ['OFFLINE', 'TIMEOUT', 'SERVER'].includes(error.kind)) {
+        const cached = await this.cachedFavorites(userId);
+        if (cached) return cached;
+      }
+      throw error;
+    }
   }
-  async getFavorite(): Promise<FavoriteMeal> {
-    return this.pending();
+
+  async getFavorite(id: string, userId?: string): Promise<FavoriteMeal> {
+    try {
+      return await request(`/favorites/${encodeURIComponent(id)}`);
+    } catch (error) {
+      if (error instanceof AppError && ['OFFLINE', 'TIMEOUT', 'SERVER'].includes(error.kind)) {
+        const cached = (await this.cachedFavorites(userId))?.find((favorite) => favorite.id === id);
+        if (cached) return cached;
+      }
+      throw error;
+    }
   }
-  async saveFavorite(): Promise<FavoriteMeal> {
-    return this.pending();
+
+  saveFavorite(fav: Parameters<MealPlanningService['saveFavorite']>[0]): Promise<FavoriteMeal> {
+    const { id, ...body } = fav;
+    return id
+      ? request(`/favorites/${encodeURIComponent(id)}`, { method: 'PUT', body })
+      : request('/favorites', { method: 'POST', body });
   }
-  async deleteFavorite(): Promise<void> {
-    return this.pending();
+
+  deleteFavorite(id: string): Promise<void> {
+    return request(`/favorites/${encodeURIComponent(id)}`, { method: 'DELETE' });
   }
-  async findRestaurants(): Promise<Restaurant[]> {
-    return this.pending();
+
+  findRestaurants(entry: MealPlanEntry, location: LocationQuery): Promise<Restaurant[]> {
+    return request('/restaurants/search', { method: 'POST', body: { planId: entry.id, location } });
   }
-  async suggestLocations(): Promise<{ title: string; kind: string }[]> {
-    return this.pending();
+
+  suggestLocations(text: string): Promise<{ title: string; kind: string }[]> {
+    if (!text.trim()) return Promise.resolve([]);
+    return request('/restaurants/locations', { query: { q: text.trim() } });
   }
 }
 

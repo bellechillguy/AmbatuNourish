@@ -34,36 +34,36 @@ export interface AssessmentService {
   getConflicts(): Promise<RuleConflict[]>;
 }
 
-/* ---------- HTTP — kontrak PENDING ---------- */
-
 class HttpAssessmentService implements AssessmentService {
-  private pending(): never {
-    throw new AppError('CONTRACT_PENDING');
+  assessProduct(productId: string, portion: Portion): Promise<Assessment> {
+    return request('/assessment/product', { method: 'POST', body: { productId, portion } });
   }
-  async assessProduct(): Promise<Assessment> {
-    return this.pending();
+
+  compare(productIds: string[]): Promise<ComparisonColumn[]> {
+    if (!productIds.length) return Promise.resolve([]);
+    return request('/assessment/compare', { method: 'POST', body: { productIds } });
   }
-  async compare(): Promise<ComparisonColumn[]> {
-    return this.pending();
+
+  getPreferences(): Promise<Preference[]> {
+    return request('/preferences');
   }
-  async getPreferences(): Promise<Preference[]> {
-    return this.pending();
+
+  savePreference(pref: Preference): Promise<Preference> {
+    return request(`/preferences/${encodeURIComponent(pref.id)}`, { method: 'PUT', body: pref });
   }
-  async savePreference(): Promise<Preference> {
-    return this.pending();
+
+  deletePreference(id: string): Promise<void> {
+    return request(`/preferences/${encodeURIComponent(id)}`, { method: 'DELETE' });
   }
-  async deletePreference(): Promise<void> {
-    return this.pending();
+
+  getNutritionPlan(): Promise<NutritionPlan | null> {
+    return request('/nutrition-plan');
   }
-  async getNutritionPlan(): Promise<NutritionPlan | null> {
-    // Nutrition Plan diterima backend dari Ambatufit (server-to-server), lalu dibaca mobile.
-    return this.pending();
-  }
-  async getConflicts(): Promise<RuleConflict[]> {
-    return this.pending();
+
+  getConflicts(): Promise<RuleConflict[]> {
+    return request('/nutrition-plan/conflicts');
   }
 }
-void request; // klien HTTP siap dipakai saat kontrak tersedia
 
 /* ---------- Mock (DEMO) ---------- */
 

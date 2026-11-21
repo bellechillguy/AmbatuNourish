@@ -101,7 +101,7 @@ export function SyncStatusScreen() {
         <Banner
           type="syncFailed"
           title={`${failed} perubahan gagal disinkronkan`}
-          message="Data tetap aman di perangkat. Coba lagi, atau lihat detailnya di bawah."
+          message="Lihat detail perubahan. Anda bisa mencoba lagi untuk gangguan sementara atau memperbaiki isian yang ditolak."
           actionLabel="Coba semua"
           onAction={() => void syncNow()}
         />
@@ -134,7 +134,7 @@ export function SyncStatusScreen() {
               </AppText>
               <View style={styles.wrap}>
                 <StatusChip status={conflict ? 'Menunggu sinkronisasi' : chip} />
-                {op.status === 'FAILED' && !conflict ? (
+                {op.status === 'FAILED' && !op.rejected && !conflict ? (
                   <Pressable onPress={() => void retry(op.opId)} accessibilityRole="button" hitSlop={10} disabled={!online}>
                     <AppText variant="footnoteEmphasized">Coba lagi</AppText>
                   </Pressable>
@@ -196,7 +196,7 @@ function ConflictSheet({
             <View style={[styles.flex, { gap: spacing.xs }]}>
               <AppText variant="subheadlineEmphasized">{c === 'LOCAL' ? 'Versi perangkat ini' : 'Versi tersimpan di server'}</AppText>
               <AppText variant="footnote" tone="secondary">
-                {describe(entity)}
+                {(c === 'LOCAL' ? conflict.localDeleted : conflict.serverDeleted) ? 'Dihapus' : describe(entity)}
               </AppText>
             </View>
           </Pressable>

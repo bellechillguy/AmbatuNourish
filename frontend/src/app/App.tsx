@@ -50,6 +50,19 @@ function Gate() {
   );
 }
 
+function UserData() {
+  const { user } = useSession();
+  return (
+    <OfflineDataProvider key={user?.id ?? 'visitor'}>
+      <CatalogLocalProvider>
+        <ToastProvider>
+          <Gate />
+        </ToastProvider>
+      </CatalogLocalProvider>
+    </OfflineDataProvider>
+  );
+}
+
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -57,13 +70,7 @@ export default function App() {
       <ConnectivityProvider>
         <SessionProvider>
           <PreferencesUiProvider>
-            <OfflineDataProvider>
-              <CatalogLocalProvider>
-                <ToastProvider>
-                  <Gate />
-                </ToastProvider>
-              </CatalogLocalProvider>
-            </OfflineDataProvider>
+            <UserData />
           </PreferencesUiProvider>
         </SessionProvider>
       </ConnectivityProvider>

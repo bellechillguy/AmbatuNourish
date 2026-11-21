@@ -1,3 +1,4 @@
+import { config } from '../api/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
@@ -8,7 +9,7 @@ import * as SecureStore from 'expo-secure-store';
  * Catatan: Expo SQLite adalah opsi PROPOSED untuk antrean yang lebih besar; AsyncStorage dipilih
  * di sini agar sederhana. Ganti adapter di file ini bila tim memutuskan SQLite.
  */
-const TOKEN_KEY = 'ambatunourish.session';
+const TOKEN_KEY = config.useMock ? 'ambatunourish.demo-session' : 'ambatunourish.session';
 
 export const secureSession = {
   async load(): Promise<string | null> {
