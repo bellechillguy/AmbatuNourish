@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "handlers": {
+    "console": { "class": "logging.StreamHandler", "stream": "ext://sys.stderr" }
+  },
+  "loggers": {
+    "ambatunourish": { "handlers": ["console"], "level": "INFO", "propagate": false }
+  }
+}

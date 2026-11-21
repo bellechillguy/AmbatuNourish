@@ -1,0 +1,55 @@
+@baseUrl = http://localhost:8081/api
+
+### Readiness
+GET {{baseUrl}}/health
+
+### Buat akun development
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{"name":"Pengguna Uji","email":"nourish-test@example.test","password":"NourishUji123"}
+
+### Login
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"email":"nourish-test@example.test","password":"NourishUji123"}
+
+### Lookup barcode dari Open Food Facts
+GET {{baseUrl}}/products/barcode/3017620422003
+Authorization: Bearer {{login.response.body.$.token}}
+
+### Cari produk yang cocok
+GET {{baseUrl}}/products?q=Nutella&discover=1
+Authorization: Bearer {{login.response.body.$.token}}
+
+### Buat produk pribadi
+# @name manual
+POST {{baseUrl}}/manual-products
+Authorization: Bearer {{login.response.body.$.token}}
+Content-Type: application/json
+
+{"name":"Oat uji","basis":"MASS","nutrientsPer100":{"energy":375,"sugar":4,"sodium":0}}
+
+### Setel preferensi gula
+PUT {{baseUrl}}/preferences/sugar
+Authorization: Bearer {{login.response.body.$.token}}
+Content-Type: application/json
+
+{"value":10}
+
+### Nilai produk pada porsi 50 gram
+POST {{baseUrl}}/assessment/product
+Authorization: Bearer {{login.response.body.$.token}}
+Content-Type: application/json
+
+{"productId":"{{manual.response.body.$.id}}","portion":{"quantity":50,"unit":"g"}}
+
+### Tarik jadwal dan konsumsi
+GET {{baseUrl}}/sync
+Authorization: Bearer {{login.response.body.$.token}}
+
+### Ringkasan gizi, sesuaikan tanggal
+GET {{baseUrl}}/consumption/daily-summary?date=2026-11-21&timezone=Asia%2FJakarta
+Authorization: Bearer {{login.response.body.$.token}}
