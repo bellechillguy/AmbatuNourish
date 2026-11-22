@@ -6,9 +6,6 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "backgroundColor": "#F8F6EF",
-    "splash": {
-      "backgroundColor": "#F8F6EF"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "id.ambatunourish.app",
@@ -26,6 +23,14 @@
       "permissions": ["CAMERA", "ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "VIBRATE"]
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFDF7",
+          "image": "./assets/splash-wordmark.png",
+          "imageWidth": 192
+        }
+      ],
       "expo-font",
       "expo-secure-store",
       [

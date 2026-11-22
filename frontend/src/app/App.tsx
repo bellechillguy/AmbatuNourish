@@ -7,7 +7,8 @@ import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect } from 'react';
+import React, { useCallback, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastProvider } from '../shared/components/Overlay';
@@ -17,6 +18,7 @@ import { PreferencesUiProvider } from '../shared/state/PreferencesUiProvider';
 import { SessionProvider, useSession } from '../shared/state/SessionProvider';
 import { OfflineDataProvider } from '../shared/sync/OfflineDataProvider';
 import { colors } from '../shared/theme';
+import { LaunchSplash } from './LaunchSplash';
 import { RootNavigator } from './navigation/RootNavigator';
 
 void SplashScreen.preventAutoHideAsync();
@@ -26,8 +28,10 @@ const navTheme = {
   colors: { ...DefaultTheme.colors, background: colors.canvas, card: colors.neutralWhite, text: colors.labelPrimary, primary: colors.brandGreen },
 };
 
-function Gate() {
+function AppContent() {
   const { ready } = useSession();
+  const [launched, setLaunched] = useState(false);
+  const finishLaunch = useCallback(() => setLaunched(true), []);
   const [fontsLoaded, fontError] = useFonts({
     Lora_500Medium,
     PublicSans_400Regular,
@@ -37,16 +41,20 @@ function Gate() {
   });
   const canRender = ready && (fontsLoaded || !!fontError);
 
-  useEffect(() => {
-    if (canRender) void SplashScreen.hideAsync();
-  }, [canRender]);
-
-  if (!canRender) return null;
-
   return (
-    <NavigationContainer theme={navTheme}>
-      <RootNavigator />
-    </NavigationContainer>
+    <View style={styles.root}>
+      {canRender ? (
+        <View
+          style={styles.content}
+          pointerEvents={launched ? 'auto' : 'none'}
+          accessibilityElementsHidden={!launched}
+          importantForAccessibility={launched ? 'auto' : 'no-hide-descendants'}
+        >
+          <UserData />
+        </View>
+      ) : null}
+      {!launched ? <LaunchSplash ready={canRender} onFinish={finishLaunch} /> : null}
+    </View>
   );
 }
 
@@ -56,7 +64,9 @@ function UserData() {
     <OfflineDataProvider key={user?.id ?? 'visitor'}>
       <CatalogLocalProvider>
         <ToastProvider>
-          <Gate />
+          <NavigationContainer theme={navTheme}>
+            <RootNavigator />
+          </NavigationContainer>
         </ToastProvider>
       </CatalogLocalProvider>
     </OfflineDataProvider>
@@ -70,10 +80,15 @@ export default function App() {
       <ConnectivityProvider>
         <SessionProvider>
           <PreferencesUiProvider>
-            <UserData />
+            <AppContent />
           </PreferencesUiProvider>
         </SessionProvider>
       </ConnectivityProvider>
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.neutralWhite },
+  content: { flex: 1 },
+});
