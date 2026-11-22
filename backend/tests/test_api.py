@@ -52,9 +52,9 @@ class ApiTests(unittest.TestCase):
         self.token = self.register('sari')
         self.other = self.register('budi')
 
-    def call(self, method, path, expected, body=None, token=None, partner=None):
+    def call(self, method, path, expected, body=None, token=None, partner=None, *, prefix='/api'):
         raw = json.dumps(body).encode() if body is not None else b''
-        uri = urlsplit('/api' + path)
+        uri = urlsplit(prefix + path)
         env = {}
         setup_testing_defaults(env)
         env.update(REQUEST_METHOD=method, PATH_INFO=uri.path, QUERY_STRING=uri.query, CONTENT_LENGTH=str(len(raw)),
@@ -70,6 +70,8 @@ class ApiTests(unittest.TestCase):
         payload = b''.join(self.app(env, start))
         self.assertIn('X-Request-ID', response['headers'])
         self.assertEqual(response['status'], expected, payload)
+        if response['headers']['Content-Type'].startswith('text/html'):
+            return payload.decode()
         return json.loads(payload) if payload else None
 
     def register(self, name):
@@ -103,6 +105,30 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(expected['code'], 'CONTRACT_PENDING')
         self.app.identity = SharedIdentity()
         self.call('GET', '/auth/me', 503, token=self.token)
+
+    def test_public_docs_and_versioned_api(self):
+        base = '/api/v1'
+        index = self.call('GET', base, 200, prefix='')
+        self.assertEqual(index['baseUrl'], base)
+        status = self.call('GET', index['health'], 200, prefix='')
+        self.assertEqual(status, self.call('GET', '/health', 200, prefix=base))
+        self.assertEqual(status, self.call('GET', '/health', 200))
+        self.assertIn("url: '/openapi.json'", self.call('GET', index['docs'], 200, prefix=''))
+        spec = self.call('GET', index['openapi'], 200, prefix='')
+        self.assertEqual(spec['servers'], [{'url': base}])
+        methods = {method for path in spec['paths'].values() for method in path}
+        self.assertTrue({'get', 'post', 'put', 'patch', 'delete'} <= methods)
+        personal = spec['paths']['/products/barcode/{barcode}']['get']
+        self.assertEqual(personal['security'], [{'BearerAuth': []}])
+        self.assertEqual(personal['parameters'][0]['name'], 'barcode')
+        partner = '/partner/products/barcode/' + BARCODE
+        self.assertEqual(spec['paths']['/partner/products/barcode/{barcode}']['get']['security'], [{'PartnerKey': []}])
+        self.assertEqual(self.call('GET', '/auth/me', 200, token=self.token, prefix=base),
+                         self.call('GET', '/auth/me', 200, token=self.token))
+        self.call('GET', '/auth/me', 401, prefix=base)
+        self.call('GET', partner, 401, prefix=base)
+        self.assertEqual(self.call('GET', partner, 200, partner='test-key', prefix=base)['barcode'], BARCODE)
+        self.call('GET', '/api/v2/health', 404, prefix='')
 
     def test_catalog_discovery_refresh_and_private_products(self):
         self.assertEqual(self.call('GET', '/products?q=minuman', 200, token=self.token), [])
