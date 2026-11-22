@@ -20,8 +20,7 @@ export interface AppTextProps extends TextProps {
 }
 
 /**
- * Semua teks memakai text style Figma dan tetap bisa diskalakan (Dynamic Type / font scale).
- * Batas maxFontSizeMultiplier dipakai agar label penting tidak terpotong di 200%.
+ * Gunakan varian tipografi dan beri ruang bagi skala teks perangkat sampai 200%.
  */
 export function AppText({ variant = 'body', tone = 'primary', align, style, ...rest }: AppTextProps) {
   return (

@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View, type TextInputInstance, type TextInputProps } from 'react-native';
 
 import { AppText, Icon, ListRow, NutrientRow, NutritionTableHeader, StatusChip, Tile, completenessChip } from '../../shared/components';
@@ -10,12 +10,13 @@ import { formatNumber } from '../../shared/utils/format';
 
 /** Search Field 48pt — border 1.5 Label/Secondary, radius 12, ikon search. */
 export const SearchField = forwardRef<TextInputInstance, TextInputProps & { onPressField?: () => void }>(function SearchField(
-  { onPressField, placeholder = 'Cari nama produk atau barcode', value, ...props },
+  { onPressField, placeholder = 'Nama produk atau barcode', value, onFocus, onBlur, ...props },
   ref,
 ) {
+  const [focused, setFocused] = useState(false);
   const inner = (
-    <View style={styles.search}>
-      <Icon name="search" size={20} />
+    <View style={[styles.search, focused && styles.searchFocused]}>
+      <Icon name="search" size={20} color={focused ? colors.brandGreen : colors.labelSecondary} />
       {onPressField ? (
         <AppText variant="body" tone={value ? 'primary' : 'secondary'} style={styles.flex}>
           {value || placeholder}
@@ -30,6 +31,8 @@ export const SearchField = forwardRef<TextInputInstance, TextInputProps & { onPr
           returnKeyType="search"
           accessibilityLabel={placeholder}
           clearButtonMode="while-editing"
+          onFocus={(event) => { setFocused(true); onFocus?.(event); }}
+          onBlur={(event) => { setFocused(false); onBlur?.(event); }}
           maxFontSizeMultiplier={2}
           {...props}
         />
@@ -60,7 +63,7 @@ export function ProductRow({
   const subtitle = product.brand
     ? `${product.brand}${product.sizeLabel ? ` (${product.sizeLabel})` : ''}`
     : product.sizeLabel;
-  const chip = user ? 'Belum diverifikasi' : product.completeness !== 'COMPLETE' ? completenessChip[product.completeness] : 'Data lengkap';
+  const chip = user ? 'Belum diverifikasi' : product.completeness !== 'COMPLETE' ? completenessChip[product.completeness] : undefined;
   const sourceLabel = user ? 'Dimasukkan oleh Anda' : 'Open Food Facts';
   return (
     <ListRow
@@ -68,18 +71,18 @@ export function ProductRow({
       subtitle={subtitle}
       leading={<Tile tone={user ? 'user' : 'neutral'} />}
       onPress={onPress}
-      accessibilityLabel={`${product.name}, ${subtitle ?? ''}, ${compact ? '' : chip}, ${sourceLabel}`}
+      accessibilityLabel={[product.name, subtitle, !compact && chip, showSource && sourceLabel].filter(Boolean).join(', ')}
     >
-      {compact ? null : (
+      {!compact && (chip || showSource) ? (
         <View style={styles.meta}>
-          <StatusChip status={chip} />
+          {chip ? <StatusChip status={chip} /> : null}
           {showSource ? (
             <AppText variant="caption1" tone="secondary">
               {sourceLabel}
             </AppText>
           ) : null}
         </View>
-      )}
+      ) : null}
     </ListRow>
   );
 }
@@ -160,17 +163,18 @@ export { NUTRIENT_LABEL };
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   search: {
-    minHeight: 48,
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     paddingLeft: spacing.m,
     paddingRight: 14,
     borderWidth: 1.5,
-    borderColor: colors.labelSecondary,
+    borderColor: colors.borderStrong,
     borderRadius: radius.surface,
     backgroundColor: colors.neutralWhite,
   },
+  searchFocused: { borderColor: colors.brandGreen },
   meta: { flexDirection: 'row', alignItems: 'center', gap: spacing.s, flexWrap: 'wrap', marginTop: spacing.xxs },
   row6: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
 });

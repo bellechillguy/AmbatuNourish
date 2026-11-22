@@ -1,34 +1,29 @@
-/**
- * Tab Ringkasan: Ringkasan (L1 harian, L2 tanpa target, L3 hari tanpa catatan) dan Riwayat (K3).
- * Dihitung HANYA dari Catatan Konsumsi; rencana yang belum dimakan tidak dihitung.
- * Bar netral (hitam di atas Green Gray), tanpa penilaian merah/hijau atau alarm "melebihi batas".
- */
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useRootNav } from '../../app/navigation/types';
 import {
+  ActionLink,
   AppText,
   Button,
   Icon,
+  IconButton,
   InfoNote,
   Meter,
   Screen,
   SectionHeader,
+  Skeleton,
   StatusChip,
   SubNavigation,
   syncChip,
 } from '../../shared/components';
-import { NUTRIENT_LABEL, SUMMARY_METRICS } from '../../shared/domain/nutrients';
-import type { ConsumptionRecord, SummaryMetric } from '../../shared/domain/types';
+import { NUTRIENT_LABEL, NUTRIENT_UNIT, SUMMARY_METRICS, UNIT_SPOKEN } from '../../shared/domain/nutrients';
+import type { ConsumptionRecord, DailySummary, SummaryMetric } from '../../shared/domain/types';
 import { useOfflineData } from '../../shared/sync/OfflineDataProvider';
-import { colors, radius, spacing } from '../../shared/theme';
+import { MIN_TOUCH, colors, radius, spacing } from '../../shared/theme';
 import { addDays, formatDayShortMonth, formatShortDay, formatTime, toDateKey, todayKey } from '../../shared/utils/date';
 import { formatNumber } from '../../shared/utils/format';
 import { useDailySummary } from './hooks';
-
-const UNIT: Record<SummaryMetric, string> = { energy: 'kkal', protein: 'g', carbohydrate: 'g', sugar: 'g', fat: 'g', sodium: 'mg' };
-const SPOKEN: Record<string, string> = { kkal: 'kilokalori', g: 'gram', mg: 'miligram' };
 
 type Params = { view?: 'summary' | 'history'; date?: string };
 
@@ -42,163 +37,136 @@ export function SummaryHomeScreen({ route }: { route: { params?: Params } }) {
   }, [route.params?.view, route.params?.date]);
 
   return (
-    <Screen inTabs gap={spacing.s}>
-      <AppText variant="largeTitle" accessibilityRole="header">
-        Ringkasan Gizi
-      </AppText>
-      <SubNavigation
-        items={[
-          { value: 'summary', label: 'Ringkasan' },
-          { value: 'history', label: 'Riwayat' },
-        ]}
-        value={view}
-        onChange={setView}
-      />
+    <Screen inTabs gap={spacing.l}>
+      <View style={styles.section}>
+        <AppText variant="largeTitle" accessibilityRole="header">Ringkasan Gizi</AppText>
+        <SubNavigation
+          items={[
+            { value: 'summary', label: 'Ringkasan' },
+            { value: 'history', label: 'Riwayat' },
+          ]}
+          value={view}
+          onChange={setView}
+        />
+      </View>
       {view === 'summary' ? <DailySummaryView date={date} onDate={setDate} /> : <HistoryView />}
     </Screen>
   );
 }
 
-/* ------------------------------ L1 / L2 / L3 ------------------------------ */
-
-function DailySummaryView({ date, onDate }: { date: string; onDate: (d: string) => void }) {
+function DailySummaryView({ date, onDate }: { date: string; onDate: (date: string) => void }) {
   const nav = useRootNav();
+  const { loaded } = useOfflineData();
   const { summary, incomplete } = useDailySummary(date);
-  const today = todayKey();
-  const isToday = date === today;
-  const hasTargets = Object.keys(summary.targets).length > 0;
-  const firstWithBar = SUMMARY_METRICS.find((m) => summary.targets[m]);
-  const sodiumMissing = summary.missingCount.sodium;
+  const isToday = date === todayKey();
+  const hasTargets = SUMMARY_METRICS.some((metric) => (summary.targets[metric]?.value ?? 0) > 0);
 
   return (
     <>
       <View style={styles.dateSelector}>
-        <Pressable onPress={() => onDate(addDays(date, -1))} accessibilityRole="button" accessibilityLabel="Hari sebelumnya" style={styles.dateBtn}>
-          <Icon name="back" size={20} />
-        </Pressable>
+        <IconButton icon="back" size={19} label="Hari sebelumnya" onPress={() => onDate(addDays(date, -1))} style={styles.dateButton} />
         <View style={styles.dateCenter} accessibilityLiveRegion="polite">
-          <AppText variant="headline" align="center">
-            {formatDayShortMonth(date)}
-          </AppText>
-          <AppText variant="caption1" tone="secondary">
-            {isToday ? 'Hari ini' : ' '}
-          </AppText>
+          <AppText variant="headline" align="center">{formatDayShortMonth(date)}</AppText>
+          {isToday ? <AppText variant="caption1" tone="secondary">Hari ini</AppText> : null}
         </View>
         <Pressable
-          onPress={() => !isToday && onDate(addDays(date, 1))}
+          onPress={() => onDate(addDays(date, 1))}
           disabled={isToday}
           accessibilityRole="button"
           accessibilityLabel="Hari berikutnya"
           accessibilityState={{ disabled: isToday }}
-          style={[styles.dateBtn, isToday && { opacity: 0.35 }]}
+          style={({ pressed }) => [styles.dateButton, styles.nextDay, pressed && styles.pressed, isToday && styles.disabled]}
         >
-          <Icon name="chev-right" size={20} />
+          <Icon name="chev-right" size={19} />
         </Pressable>
       </View>
 
-      {summary.recordCount === 0 ? (
+      {!loaded ? (
+        <Skeleton width="100%" height={120} />
+      ) : summary.recordCount === 0 ? (
         <View style={styles.emptyDay}>
-          <AppText variant="title2">Tidak ada Catatan Konsumsi pada hari ini</AppText>
-          <AppText variant="subheadline" tone="secondary">
-            Jika Anda lupa mencatat, catatan bisa ditambahkan untuk tanggal ini.
-          </AppText>
-          <Button label={`Catat untuk ${formatShortDay(date).split(', ')[1]}`} icon="plus" type="secondary" onPress={() => nav.navigate('LogSource', { date })} />
+          <AppText variant="title2">Belum ada catatan</AppText>
+          <AppText variant="subheadline" tone="secondary">Tambahkan makanan yang Anda konsumsi pada tanggal ini.</AppText>
+          <ActionLink label="Catat makan" onPress={() => nav.navigate('LogSource', { date })} />
         </View>
       ) : (
         <>
-          {!hasTargets ? (
-            <View style={[styles.notice, { backgroundColor: colors.neutralGreenGray }]}>
-              <Icon name="info" size={20} />
-              <View style={[styles.flex, { gap: 6 }]}>
-                <AppText variant="subheadlineEmphasized">Belum ada target harian</AppText>
-                <AppText variant="footnote">
-                  Angka di bawah adalah total asupan Anda. Indikator kemajuan muncul bila ada target dari Nutrition Plan atau target
-                  yang Anda atur.
-                </AppText>
-                <Pressable
-                  onPress={() => nav.navigate('Main', { screen: 'ProfileTab', params: { screen: 'Preferences' } })}
-                  accessibilityRole="link"
-                  hitSlop={10}
-                >
-                  <AppText variant="footnoteEmphasized">Lihat Profil Preferensi</AppText>
-                </Pressable>
-              </View>
-            </View>
-          ) : null}
-
+          <View style={styles.energy}>
+            <AppText variant="footnoteEmphasized" tone="secondary">Asupan dari {summary.recordCount} catatan</AppText>
+            <MetricSummary metric="energy" summary={summary} featured />
+          </View>
           {incomplete > 0 ? (
-            <View style={[styles.notice, { backgroundColor: colors.brandYellow }]} accessibilityRole="alert">
-              <Icon name="alert" size={20} />
-              <View style={styles.flex}>
-                <AppText variant="subheadlineEmphasized">Total belum lengkap</AppText>
-                <AppText variant="footnote">
-                  {sodiumMissing > 0
-                    ? `${sodiumMissing} dari ${summary.recordCount} catatan tidak punya nilai natrium, jadi total natrium belum mencakupnya.`
-                    : `${incomplete} dari ${summary.recordCount} catatan tidak punya sebagian nilai gizi, jadi totalnya belum mencakup nilai tersebut.`}
-                </AppText>
-              </View>
+            <InfoNote icon="info" tone="yellow">
+              {incomplete} catatan memiliki data gizi yang belum lengkap.
+            </InfoNote>
+          ) : null}
+          <View>
+            <SectionHeader title="Rincian gizi" />
+            {SUMMARY_METRICS.filter((metric) => metric !== 'energy').map((metric) => (
+              <MetricSummary key={metric} metric={metric} summary={summary} />
+            ))}
+          </View>
+          {!hasTargets ? (
+            <View style={styles.targetNote}>
+              <AppText variant="footnote" tone="secondary">Target harian belum tersedia.</AppText>
+              <ActionLink
+                label="Lihat Profil Preferensi"
+                onPress={() => nav.navigate('Main', { screen: 'ProfileTab', params: { screen: 'Preferences' } })}
+              />
             </View>
           ) : null}
-
-          {SUMMARY_METRICS.map((m) => {
-            const target = summary.targets[m];
-            const value = summary.totals[m];
-            const missing = summary.missingCount[m];
-            const allMissing = missing === summary.recordCount;
-            const a11y = `${NUTRIENT_LABEL[m]}, ${allMissing ? 'tidak tersedia' : `${formatNumber(value, 0)}${target ? ` dari ${formatNumber(target.value, 0)}` : ''} ${SPOKEN[UNIT[m]]}`}${
-              target && m === firstWithBar ? `, target dari ${target.source === 'NUTRITION_PLAN' ? 'Nutrition Plan' : 'target Anda'}` : ''
-            }${missing > 0 && !allMissing ? `, ${missing} catatan tidak tersedia` : ''}`;
-            return (
-              <View key={m} style={styles.metric} accessible accessibilityLabel={a11y}>
-                <View style={styles.metricRow}>
-                  <AppText variant="body" style={styles.flex}>
-                    {NUTRIENT_LABEL[m]}
-                  </AppText>
-                  {allMissing ? (
-                    <AppText variant="footnoteItalic" tone="secondary">
-                      Tidak tersedia
-                    </AppText>
-                  ) : (
-                    <>
-                      <AppText variant="title2">{formatNumber(value, 0)}</AppText>
-                      <AppText variant="subheadline" tone="secondary">
-                        {target ? `${UNIT[m]} / ${formatNumber(target.value, 0)} ${UNIT[m]}` : UNIT[m]}
-                      </AppText>
-                    </>
-                  )}
-                </View>
-                {target && !allMissing ? <Meter ratio={value / target.value} height={8} /> : null}
-                {target && m === firstWithBar ? (
-                  <AppText variant="caption1" tone="secondary">
-                    Target dari {target.source === 'NUTRITION_PLAN' ? 'Nutrition Plan' : 'target Anda'}
-                  </AppText>
-                ) : null}
-                {missing > 0 && !allMissing ? (
-                  <View style={styles.missing}>
-                    <Icon name="alert" size={14} />
-                    <AppText variant="caption1Emphasized">{missing} catatan tidak tersedia</AppText>
-                  </View>
-                ) : null}
-              </View>
-            );
-          })}
         </>
       )}
     </>
   );
 }
 
-/* ------------------------------ K3 ------------------------------ */
+function MetricSummary({ metric, summary, featured = false }: { metric: SummaryMetric; summary: DailySummary; featured?: boolean }) {
+  const label = NUTRIENT_LABEL[metric];
+  const unit = NUTRIENT_UNIT[metric];
+  const value = summary.totals[metric];
+  const missing = summary.missingCount[metric];
+  const target = summary.targets[metric];
+  const known = missing < summary.recordCount;
+  const hasTarget = target !== undefined && target.value > 0;
+  const targetSource = target?.source === 'NUTRITION_PLAN' ? 'Nutrition Plan' : 'target Anda';
+  const valueLabel = known ? `${formatNumber(value, 0)} ${UNIT_SPOKEN[unit]}` : 'Tidak tersedia';
+  const targetLabel = hasTarget ? `, target ${formatNumber(target.value, 0)} ${UNIT_SPOKEN[unit]} dari ${targetSource}` : '';
+  const missingLabel = known && missing ? `, ${missing} catatan tanpa nilai` : '';
+
+  return (
+    <View
+      style={featured ? styles.featuredMetric : styles.metric}
+      accessible accessibilityLabel={`${label}, ${valueLabel}${targetLabel}${missingLabel}`}
+    >
+      <View style={[styles.metricRow, featured && styles.featuredRow]}>
+        <AppText variant={featured ? 'headline' : 'subheadlineEmphasized'} style={!featured && styles.metricLabel}>{label}</AppText>
+        {known ? (
+          <View style={styles.metricValue}>
+            <AppText variant={featured ? 'figure' : 'headline'} style={styles.numeral}>{formatNumber(value, 0)}</AppText>
+            <AppText variant="footnote" tone="secondary">{unit}</AppText>
+          </View>
+        ) : <AppText variant="footnote" tone="secondary">Tidak tersedia</AppText>}
+      </View>
+      {hasTarget ? (
+        <>
+          {known ? <Meter ratio={value / target.value} height={5} /> : null}
+          <AppText variant="caption1" tone="secondary">Target {formatNumber(target.value, 0)} {unit} dari {targetSource}</AppText>
+        </>
+      ) : null}
+      {known && missing > 0 ? <AppText variant="caption1" tone="secondary">{missing} catatan tanpa nilai</AppText> : null}
+    </View>
+  );
+}
 
 function HistoryView() {
   const nav = useRootNav();
-  const { records, queue, retry } = useOfflineData();
+  const { records, queue, retry, loaded } = useOfflineData();
   const groups = useMemo(() => {
-    const sorted = [...records].sort((a, b) => b.consumedAt.localeCompare(a.consumedAt));
     const map = new Map<string, ConsumptionRecord[]>();
-    sorted.forEach((r) => {
-      const k = toDateKey(new Date(r.consumedAt));
-      map.set(k, [...(map.get(k) ?? []), r]);
+    [...records].sort((a, b) => b.consumedAt.localeCompare(a.consumedAt)).forEach((record) => {
+      const day = toDateKey(new Date(record.consumedAt));
+      map.set(day, [...(map.get(day) ?? []), record]);
     });
     return [...map.entries()];
   }, [records]);
@@ -206,60 +174,45 @@ function HistoryView() {
   return (
     <>
       <View style={styles.historyHeader}>
-        <View style={styles.flex} />
-        <Pressable onPress={() => nav.navigate('LogSource')} accessibilityRole="button" style={styles.addLink} hitSlop={8}>
-          <Icon name="plus" size={18} />
-          <AppText variant="subheadlineEmphasized">Catat makan</AppText>
-        </Pressable>
+        <AppText variant="footnote" tone="secondary" style={styles.flex}>{records.length} catatan</AppText>
+        <Button label="Catat makan" type="secondary" icon="plus" fullWidth={false} onPress={() => nav.navigate('LogSource')} />
       </View>
-      {groups.length === 0 ? (
-        <InfoNote>Belum ada Catatan Konsumsi. Catatan yang Anda simpan akan muncul di sini, dikelompokkan per hari.</InfoNote>
-      ) : null}
+      {!loaded ? <Skeleton width="100%" height={72} /> : null}
+      {loaded && groups.length === 0 ? <InfoNote>Belum ada catatan konsumsi.</InfoNote> : null}
       {groups.map(([day, list]) => (
         <View key={day}>
           <SectionHeader title={day === todayKey() ? `Hari ini, ${formatShortDay(day)}` : formatDayShortMonth(day)} variant="headline" />
-          {list.map((r) => {
-            const failedOp = queue.find((o) => o.entityId === r.id && o.status === 'FAILED');
-            const incomplete = SUMMARY_METRICS.some((m) => r.snapshot[m] === null);
-            const kcal = r.snapshot.energy;
-            const detail =
-              r.source === 'PLAN'
-                ? `dari rencana, ${r.itemsCount} item`
-                : r.source === 'FAVORITE'
-                  ? 'favorit'
-                  : `${formatNumber(r.quantity)} ${r.unit}`;
+          {list.map((record) => {
+            const failedOp = queue.find((operation) => operation.entityId === record.id && operation.status === 'FAILED');
+            const incomplete = SUMMARY_METRICS.some((metric) => record.snapshot[metric] === null);
+            const kcal = record.snapshot.energy;
+            const detail = record.source === 'PLAN'
+              ? `${record.itemsCount} item dari rencana`
+              : record.source === 'FAVORITE' ? 'Favorit' : `${formatNumber(record.quantity)} ${record.unit}`;
             return (
-              <Pressable
-                key={r.id}
-                onPress={() => nav.navigate('LogForm', { source: r.source, recordId: r.id })}
-                accessibilityRole="button"
-                accessibilityLabel={`${formatTime(r.consumedAt)}, ${r.title}, ${detail}`}
-                style={styles.logRow}
-              >
-                <View style={styles.timeCol}>
-                  <AppText variant="subheadlineEmphasized">{formatTime(r.consumedAt)}</AppText>
-                </View>
-                <View style={[styles.flex, { gap: spacing.xs }]}>
-                  <AppText variant="subheadlineEmphasized">{r.title}</AppText>
-                  <AppText variant="footnote" tone="secondary">
-                    {detail}
-                    {kcal !== null ? ` (${formatNumber(kcal, 0)} kkal)` : ''}
+              <View key={record.id} style={styles.logItem}>
+                <Pressable
+                  onPress={() => nav.navigate('LogForm', { source: record.source, recordId: record.id })}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${formatTime(record.consumedAt)}, ${record.title}, ${detail}${kcal === null ? '' : `, ${formatNumber(kcal, 0)} kilokalori`}`}
+                  style={({ pressed }) => [styles.logRow, pressed && styles.pressed]}
+                >
+                  <AppText variant="footnoteEmphasized" tone="secondary" style={[styles.numeral, styles.timeCol]}>
+                    {formatTime(record.consumedAt)}
                   </AppText>
-                  {/* Status sinkron hanya tampil bila perlu perhatian; tersinkron = diam. */}
-                  {r.syncStatus !== 'SYNCED' || incomplete ? (
-                    <View style={styles.wrap}>
-                      {r.syncStatus !== 'SYNCED' ? <StatusChip status={syncChip[r.syncStatus]} /> : null}
-                      {r.syncStatus === 'FAILED' ? (
-                        <Pressable onPress={() => void retry(failedOp?.opId)} accessibilityRole="button" hitSlop={10}>
-                          <AppText variant="footnoteEmphasized">Coba lagi</AppText>
-                        </Pressable>
-                      ) : null}
-                      {incomplete && r.syncStatus === 'SYNCED' ? <StatusChip status="Data tidak lengkap" /> : null}
-                    </View>
-                  ) : null}
-                </View>
-                <Icon name="chev-right" size={20} />
-              </Pressable>
+                  <View style={styles.flex}>
+                    <AppText variant="subheadlineEmphasized">{record.title}</AppText>
+                    <AppText variant="footnote" tone="secondary">{detail}{kcal === null ? '' : ` · ${formatNumber(kcal, 0)} kkal`}</AppText>
+                  </View>
+                  <Icon name="chev-right" size={18} color={colors.labelSecondary} />
+                </Pressable>
+                {record.syncStatus !== 'SYNCED' || incomplete ? (
+                  <View style={styles.logStatus}>
+                    <StatusChip status={record.syncStatus === 'SYNCED' ? 'Data tidak lengkap' : syncChip[record.syncStatus]} />
+                    {failedOp ? <ActionLink label="Coba lagi" chevron={false} onPress={() => void retry(failedOp.opId)} /> : null}
+                  </View>
+                ) : null}
+              </View>
             );
           })}
         </View>
@@ -269,25 +222,27 @@ function HistoryView() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  dateSelector: { flexDirection: 'row', alignItems: 'center', gap: spacing.s, paddingVertical: spacing.xs },
-  dateBtn: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: colors.labelQuaternary, alignItems: 'center', justifyContent: 'center' },
-  dateCenter: { flex: 1, alignItems: 'center' },
-  notice: { flexDirection: 'row', gap: 10, padding: spacing.m, borderRadius: radius.surface },
-  metric: { paddingVertical: spacing.m, gap: 6, borderBottomWidth: 1, borderBottomColor: colors.labelQuaternary },
-  metricRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.s, flexWrap: 'wrap' },
-  missing: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  emptyDay: { gap: 10, paddingTop: spacing.xl },
-  historyHeader: { flexDirection: 'row', alignItems: 'center' },
-  addLink: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 },
-  logRow: {
-    flexDirection: 'row',
-    gap: spacing.m,
-    paddingVertical: spacing.m,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.labelQuaternary,
-    alignItems: 'flex-start',
-  },
-  timeCol: { width: 48 },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s, alignItems: 'center' },
+  flex: { flex: 1, minWidth: 0 },
+  section: { gap: spacing.xs },
+  dateSelector: { flexDirection: 'row', alignItems: 'center', gap: spacing.s },
+  dateButton: { backgroundColor: colors.neutralWhite, borderWidth: 1, borderColor: colors.borderStrong },
+  nextDay: { width: MIN_TOUCH, height: MIN_TOUCH, borderRadius: radius.field, alignItems: 'center', justifyContent: 'center' },
+  dateCenter: { flex: 1, alignItems: 'center', gap: spacing.xxs },
+  pressed: { backgroundColor: colors.neutralYellowGray },
+  disabled: { opacity: 0.45 },
+  energy: { padding: spacing.l, borderRadius: radius.verdict, backgroundColor: colors.neutralGreenGray, gap: spacing.s },
+  emptyDay: { padding: spacing.l, borderRadius: radius.verdict, backgroundColor: colors.neutralYellowGray, gap: spacing.xs },
+  featuredMetric: { gap: spacing.xs },
+  metric: { paddingVertical: spacing.m, gap: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.labelQuaternary },
+  metricRow: { flexDirection: 'row', alignItems: 'baseline', columnGap: spacing.s, flexWrap: 'wrap' },
+  featuredRow: { justifyContent: 'space-between' },
+  metricLabel: { flexGrow: 1 },
+  metricValue: { flexDirection: 'row', alignItems: 'baseline', columnGap: spacing.xs, flexWrap: 'wrap' },
+  numeral: { fontVariant: ['tabular-nums'] },
+  targetNote: { paddingTop: spacing.xs },
+  historyHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.s, flexWrap: 'wrap' },
+  logItem: { borderBottomWidth: 1, borderBottomColor: colors.labelQuaternary },
+  logRow: { minHeight: MIN_TOUCH, flexDirection: 'row', gap: spacing.m, paddingVertical: spacing.m, alignItems: 'flex-start' },
+  timeCol: { minWidth: 44 },
+  logStatus: { paddingLeft: 56, paddingBottom: spacing.s, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.s },
 });

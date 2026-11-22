@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
-import { colors, radius, spacing } from '../theme';
+import { MIN_TOUCH, colors, radius, spacing } from '../theme';
 import { AppText } from './AppText';
 import { Icon, type IconName } from './Icon';
 
@@ -50,12 +50,12 @@ export function Banner({ type, title, message, actionLabel, onAction, style }: B
       <View style={styles.text}>
         <AppText variant="subheadlineEmphasized">{title}</AppText>
         {message ? <AppText variant="footnote">{message}</AppText> : null}
+        {actionLabel && onAction ? (
+          <Pressable onPress={onAction} accessibilityRole="button" style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
+            <AppText variant="footnoteEmphasized" style={styles.actionLabel}>{actionLabel}</AppText>
+          </Pressable>
+        ) : null}
       </View>
-      {actionLabel ? (
-        <Pressable onPress={onAction} accessibilityRole="button" accessibilityLabel={actionLabel} hitSlop={12}>
-          <AppText variant="footnoteEmphasized">{actionLabel}</AppText>
-        </Pressable>
-      ) : null}
     </View>
   );
 }
@@ -70,5 +70,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.surface,
     alignItems: 'flex-start',
   },
-  text: { flex: 1, gap: spacing.xxs },
+  text: { flex: 1, minWidth: 0, gap: spacing.xxs },
+  action: { minHeight: MIN_TOUCH, alignSelf: 'flex-start', justifyContent: 'center' },
+  actionLabel: { color: colors.brandGreen },
+  pressed: { opacity: 0.65 },
 });

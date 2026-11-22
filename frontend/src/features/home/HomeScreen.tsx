@@ -1,185 +1,169 @@
-/**
- * 02. Beranda — B1 (terisi), B2 (hari pertama / kosong), B3 (offline, menunggu sinkronisasi).
- * Blok asupan = Catatan Konsumsi saja (tidak pernah rencana). Meter hanya bila ada target.
- */
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { useRootNav } from '../../app/navigation/types';
 import {
+  ActionLink,
   AppText,
   Banner,
   Button,
   Icon,
+  IconButton,
   Meter,
   Screen,
   SectionHeader,
+  Skeleton,
   StatusChip,
   outcomeChip,
   syncChip,
 } from '../../shared/components';
-import { NUTRIENT_LABEL, SLOT_LABEL, SLOT_ORDER } from '../../shared/domain/nutrients';
-import type { MealPlanEntry, MealSlot, SummaryMetric } from '../../shared/domain/types';
+import { NUTRIENT_LABEL, NUTRIENT_UNIT, SLOT_LABEL, SLOT_ORDER, UNIT_SPOKEN } from '../../shared/domain/nutrients';
+import type { DailySummary, MealPlanEntry, MealSlot } from '../../shared/domain/types';
 import { useConnectivity } from '../../shared/state/ConnectivityProvider';
 import { useOfflineData } from '../../shared/sync/OfflineDataProvider';
-import { colors, radius, spacing } from '../../shared/theme';
+import { MIN_TOUCH, colors, radius, spacing } from '../../shared/theme';
 import { dayName, formatDayMonth, formatTime, todayKey } from '../../shared/utils/date';
 import { formatNumber } from '../../shared/utils/format';
 import { useDailySummary } from '../consumption-history/hooks';
 
-const HOME_METRICS: SummaryMetric[] = ['energy', 'protein'];
-const UNIT: Record<SummaryMetric, string> = { energy: 'kkal', protein: 'g', carbohydrate: 'g', sugar: 'g', fat: 'g', sodium: 'mg' };
-
 export function HomeScreen() {
   const nav = useRootNav();
   const { online } = useConnectivity();
-  const { plans, status: syncStatus } = useOfflineData();
+  const { plans, loaded, status: syncStatus } = useOfflineData();
+  const { width, fontScale } = useWindowDimensions();
+  const compact = width < 360 || fontScale > 1.3;
   const today = todayKey();
   const { summary, incomplete, dayRecords } = useDailySummary(today);
-  const todaysPlans = plans.filter((p) => p.date === today);
-  const firstDay = dayRecords.length === 0 && todaysPlans.length === 0;
-  const unsyncedRecords = dayRecords.filter((r) => r.syncStatus === 'LOCAL' || r.syncStatus === 'PENDING').length;
-  const missingNatrium = summary.missingCount.sodium;
+  const todaysPlans = plans.filter((plan) => plan.date === today);
+  const unsyncedRecords = dayRecords.filter((record) => record.syncStatus === 'LOCAL' || record.syncStatus === 'PENDING').length;
+  const openLog = () => nav.navigate('LogSource', { date: today });
 
-  const openScanner = () => nav.navigate('CameraPermission');
-  const openSearch = () => nav.navigate('Main', { screen: 'ProductTab', params: { screen: 'ProductSearch' } });
-  const openSummary = () => nav.navigate('Main', { screen: 'SummaryTab', params: { screen: 'SummaryHome', params: { view: 'summary' } } });
   const openCalendar = (addSlot?: MealSlot) =>
-    nav.navigate('Main', { screen: 'PlanTab', params: { screen: 'PlanHome', params: { view: 'calendar', date: today, addSlot, nonce: addSlot ? Date.now() : undefined } } });
-
-  const headerChip = syncChip[syncStatus];
+    nav.navigate('Main', {
+      screen: 'PlanTab',
+      params: { screen: 'PlanHome', params: { view: 'calendar', date: today, addSlot, nonce: addSlot ? Date.now() : undefined } },
+    });
 
   return (
-    <Screen inTabs gap={spacing.m}>
-      {/* Header: tanggal + chip sinkronisasi global (→ O1) */}
-      <View style={[styles.header, !online && styles.headerStacked]}>
-        {!online ? (
-          <Pressable onPress={() => nav.navigate('SyncStatus')} accessibilityRole="button" accessibilityHint="Buka status sinkronisasi">
-            <StatusChip status={headerChip} />
-          </Pressable>
-        ) : null}
-        <View style={styles.flex}>
-          <AppText variant="footnoteEmphasized" tone="secondary">
-            {dayName(today)}
-          </AppText>
-          <AppText variant="largeTitle" accessibilityRole="header">
-            {formatDayMonth(today)}
-          </AppText>
+    <Screen inTabs gap={spacing.xl}>
+      <View style={styles.intro}>
+        <View style={styles.brandRow}>
+          <AppText variant="subheadlineEmphasized" style={styles.wordmark}>AmbatuNourish</AppText>
+          <IconButton
+            icon={syncStatus === 'FAILED' || !online ? 'alert' : syncStatus === 'SYNCED' ? 'cloud-check' : 'refresh'}
+            label={`Sinkronisasi, ${online ? syncChip[syncStatus] : 'offline'}`}
+            color={syncStatus === 'FAILED' ? colors.stateError : colors.brandGreen}
+            onPress={() => nav.navigate('SyncStatus')}
+            style={styles.syncButton}
+          />
         </View>
-        {online && !firstDay ? (
-          <Pressable onPress={() => nav.navigate('SyncStatus')} accessibilityRole="button" accessibilityHint="Buka status sinkronisasi">
-            <StatusChip status={headerChip} />
-          </Pressable>
-        ) : null}
+        <AppText variant="largeTitle" accessibilityRole="header">
+          {dayName(today)}, {formatDayMonth(today)}
+        </AppText>
       </View>
 
       {!online ? (
-        <Banner
-          type="offline"
-          title="Anda sedang offline"
-          message="Rencana dan catatan tetap bisa diubah. Pemindaian dan pencarian produk butuh koneksi, kecuali yang sudah tersimpan."
-        />
+        <Banner type="offline" title="Anda sedang offline" message="Rencana dan catatan tetap bisa diubah di perangkat ini." />
       ) : null}
 
-      <View style={styles.quickActions}>
-        <Button label="Pindai barcode" icon="scan" onPress={openScanner} style={styles.flex} />
-        <Button label="Cari" icon="search" type="secondary" onPress={openSearch} fullWidth={false} />
+      <View style={[styles.quickActions, compact && styles.stack]}>
+        <Button
+          label="Pindai barcode"
+          icon="scan"
+          onPress={() => nav.navigate('CameraPermission')}
+          style={compact ? undefined : styles.primaryAction}
+        />
+        <Button
+          label="Cari produk"
+          icon="search"
+          type="secondary"
+          onPress={() => nav.navigate('Main', { screen: 'ProductTab', params: { screen: 'ProductSearch' } })}
+          style={compact ? undefined : styles.secondaryAction}
+        />
       </View>
 
-      {!firstDay ? (
-        <Pressable onPress={() => nav.navigate('LogSource')} accessibilityRole="link" style={styles.logLink} hitSlop={8}>
-          <Icon name="plus" size={18} />
-          <AppText variant="subheadlineEmphasized">Catat makan tanpa memindai</AppText>
-        </Pressable>
-      ) : null}
-
-      {/* ---------- Asupan hari ini ---------- */}
-      <SectionHeader title="Asupan hari ini" actionLabel={firstDay ? undefined : 'Ringkasan'} onAction={openSummary} />
-      {firstDay || dayRecords.length === 0 ? (
-        <View style={styles.emptyIntake}>
-          <AppText variant="headline">Belum ada Catatan Konsumsi hari ini.</AppText>
-          <AppText variant="subheadline" tone="secondary">
-            Pindai kemasan atau pilih makanan favorit, lalu catat porsinya. Ringkasan dihitung dari yang benar-benar Anda
-            makan.
-          </AppText>
-          <Button label="Catat makan pertama" icon="plus" type="secondary" onPress={() => nav.navigate('LogSource')} />
-        </View>
-      ) : (
-        <>
-          {HOME_METRICS.map((m) => {
-            const target = summary.targets[m];
-            const value = summary.totals[m];
-            const a11y = target
-              ? `${NUTRIENT_LABEL[m]}, ${formatNumber(value, 0)} dari ${formatNumber(target.value, 0)} ${m === 'energy' ? 'kilokalori' : 'gram'}`
-              : `${NUTRIENT_LABEL[m]}, ${formatNumber(value, 0)} ${m === 'energy' ? 'kilokalori' : 'gram'}`;
-            return (
-              <View key={m} style={styles.meter} accessible accessibilityLabel={a11y}>
-                <View style={styles.meterRow}>
-                  <AppText variant="subheadline" style={styles.flex}>
-                    {NUTRIENT_LABEL[m]}
-                  </AppText>
-                  <AppText variant="subheadlineEmphasized">{formatNumber(value, 0)}</AppText>
-                  <AppText variant="subheadline" tone="secondary">
-                    {target ? `/ ${formatNumber(target.value, 0)} ${UNIT[m]}` : UNIT[m]}
-                  </AppText>
-                </View>
-                {target ? <Meter ratio={value / target.value} /> : null}
+      <View style={styles.section}>
+        <SectionHeader
+          title="Asupan hari ini"
+          actionLabel="Ringkasan"
+          onAction={() => nav.navigate('Main', { screen: 'SummaryTab', params: { screen: 'SummaryHome', params: { view: 'summary', date: today } } })}
+        />
+        <View style={styles.intake}>
+          {!loaded ? (
+            <Skeleton width="100%" height={72} />
+          ) : summary.recordCount === 0 ? (
+            <View>
+              <AppText variant="headline">Belum ada catatan hari ini</AppText>
+              <AppText variant="subheadline" tone="secondary" style={styles.emptyHint}>Tambahkan makanan yang sudah Anda konsumsi.</AppText>
+              <ActionLink label="Catat makan" onPress={openLog} />
+            </View>
+          ) : (
+            <>
+              <View style={[styles.figures, compact && styles.stack]}>
+                <IntakeMetric metric="energy" summary={summary} />
+                <View style={compact ? styles.horizontalDivider : styles.verticalDivider} />
+                <IntakeMetric metric="protein" summary={summary} />
               </View>
-            );
-          })}
-          {!online && unsyncedRecords > 0 ? (
-            <View style={styles.wrapRow}>
-              <StatusChip status="Tersimpan di perangkat" />
-              <AppText variant="footnote" tone="secondary">
-                Termasuk {unsyncedRecords} catatan baru
-              </AppText>
-            </View>
-          ) : incomplete > 0 ? (
-            <View style={styles.wrapRow}>
-              <StatusChip status="Data tidak lengkap" />
-              <AppText variant="footnote" tone="secondary">
-                {missingNatrium > 0
-                  ? `${missingNatrium} dari ${summary.recordCount} catatan tanpa nilai natrium`
-                  : `${incomplete} dari ${summary.recordCount} catatan tanpa sebagian nilai gizi`}
-              </AppText>
-            </View>
-          ) : null}
-        </>
-      )}
+              <View style={styles.intakeFooter}>
+                <AppText variant="footnote" tone="secondary" style={styles.flex}>{summary.recordCount} catatan</AppText>
+                <ActionLink label="Catat makan" onPress={openLog} />
+              </View>
+              {unsyncedRecords > 0 && !online ? (
+                <AppText variant="footnote" tone="secondary">{unsyncedRecords} catatan tersimpan di perangkat</AppText>
+              ) : null}
+              {incomplete > 0 ? (
+                <View style={styles.detailLine}>
+                  <Icon name="info" size={16} color={colors.labelSecondary} />
+                  <AppText variant="footnote" tone="secondary" style={styles.flex}>{incomplete} catatan dengan data gizi tidak lengkap</AppText>
+                </View>
+              ) : null}
+            </>
+          )}
+        </View>
+      </View>
 
-      {/* ---------- Rencana hari ini ---------- */}
-      <SectionHeader title="Rencana hari ini" actionLabel={firstDay ? undefined : 'Kalender'} onAction={() => openCalendar()} />
-      {SLOT_ORDER.map((slot) => {
-        const entry = todaysPlans.find((p) => p.slot === slot);
-        if (firstDay) {
-          return (
-            <Pressable
-              key={slot}
-              onPress={() => openCalendar(slot)}
-              accessibilityRole="button"
-              accessibilityLabel={`${SLOT_LABEL[slot]}, tambah rencana`}
-              style={styles.emptySlotRow}
-            >
-              <AppText variant="body" tone="secondary">
-                {SLOT_LABEL[slot]}
-              </AppText>
-              <Icon name="plus" size={24} />
-            </Pressable>
-          );
-        }
-        return (
+      <View style={styles.section}>
+        <SectionHeader title="Rencana hari ini" actionLabel="Kalender" onAction={() => openCalendar()} />
+        {SLOT_ORDER.map((slot) => (
           <SlotRow
             key={slot}
             slot={slot}
-            entry={entry}
+            entry={todaysPlans.find((plan) => plan.slot === slot)}
             online={online}
             onAdd={() => openCalendar(slot)}
             onOpen={(id) => nav.navigate('PlanDetail', { planId: id })}
             onMarkConsumed={(id) => nav.navigate('PlanDetail', { planId: id, markConsumed: true })}
           />
-        );
-      })}
+        ))}
+      </View>
     </Screen>
+  );
+}
+
+function IntakeMetric({ metric, summary }: { metric: 'energy' | 'protein'; summary: DailySummary }) {
+  const unit = NUTRIENT_UNIT[metric];
+  const value = summary.totals[metric];
+  const known = summary.missingCount[metric] < summary.recordCount;
+  const target = summary.targets[metric]?.value;
+  const actualLabel = known ? `${formatNumber(value, 0)} ${UNIT_SPOKEN[unit]}` : 'Tidak tersedia';
+  const targetLabel = known && target && target > 0 ? `, target ${formatNumber(target, 0)} ${UNIT_SPOKEN[unit]}` : '';
+
+  return (
+    <View style={styles.metric} accessible accessibilityLabel={`${NUTRIENT_LABEL[metric]}, ${actualLabel}${targetLabel}`}>
+      <AppText variant="footnoteEmphasized" tone="secondary">{NUTRIENT_LABEL[metric]}</AppText>
+      {known ? (
+        <View style={styles.figuresValue}>
+          <AppText variant="figure">{formatNumber(value, 0)}</AppText>
+          <AppText variant="footnote" tone="secondary">{unit}</AppText>
+        </View>
+      ) : <AppText variant="subheadline" tone="secondary">Tidak tersedia</AppText>}
+      {known && target && target > 0 ? (
+        <>
+          <Meter ratio={value / target} height={4} />
+          <AppText variant="caption1" tone="secondary">Target {formatNumber(target, 0)} {unit}</AppText>
+        </>
+      ) : null}
+    </View>
   );
 }
 
@@ -200,78 +184,77 @@ function SlotRow({
 }) {
   if (!entry) {
     return (
-      <Pressable onPress={onAdd} accessibilityRole="button" accessibilityLabel={`${SLOT_LABEL[slot]}, belum ada rencana. Tambah`} style={styles.slot}>
-        <Icon name="plus" size={24} />
-        <View style={styles.slotText}>
-          <AppText variant="footnoteEmphasized" tone="secondary">
-            {SLOT_LABEL[slot]}
-          </AppText>
-          <AppText variant="body" tone="secondary">
-            Belum ada rencana
-          </AppText>
-        </View>
+      <Pressable
+        onPress={onAdd}
+        accessibilityRole="button"
+        accessibilityLabel={`Tambah rencana ${SLOT_LABEL[slot]}`}
+        style={({ pressed }) => [styles.slot, styles.emptySlot, pressed && styles.pressed]}
+      >
+        <AppText variant="subheadlineEmphasized" style={styles.flex}>{SLOT_LABEL[slot]}</AppText>
+        <Icon name="plus" size={20} color={colors.brandGreen} />
       </Pressable>
     );
   }
   const consumed = entry.status === 'CONSUMED';
-  const needsAttention = entry.syncStatus !== 'SYNCED';
+  const status = consumed
+    ? entry.consumedAt ? `Dikonsumsi ${formatTime(entry.consumedAt)}` : 'Dikonsumsi'
+    : 'Direncanakan';
+  const showSync = entry.syncStatus === 'FAILED' || (!online && entry.syncStatus !== 'SYNCED');
+
   return (
-    <Pressable
-      onPress={() => onOpen(entry.id)}
-      accessibilityRole="button"
-      accessibilityLabel={`${SLOT_LABEL[slot]}, ${entry.title}, ${consumed ? `dikonsumsi ${entry.consumedAt ? formatTime(entry.consumedAt) : ''}` : 'direncanakan'}`}
-      style={styles.slot}
-    >
-      <Icon name={consumed ? 'consumed' : 'planned'} size={24} />
-      <View style={styles.slotText}>
-        <AppText variant="footnoteEmphasized" tone="secondary">
-          {SLOT_LABEL[slot]}
-        </AppText>
-        <AppText variant="headline">{entry.title}</AppText>
-        <AppText variant="footnote" tone="secondary">
-          {consumed ? `Dikonsumsi ${entry.consumedAt ? formatTime(entry.consumedAt) : ''}` : 'Direncanakan'}
-        </AppText>
-        {needsAttention && (!online || entry.syncStatus === 'FAILED') ? (
-          <StatusChip status={syncChip[entry.syncStatus]} style={{ marginTop: spacing.xs }} />
-        ) : !consumed ? (
-          <View style={[styles.wrapRow, { marginTop: spacing.xs }]}>
-            {entry.outcome ? <StatusChip status={outcomeChip[entry.outcome]} /> : null}
-            <Pressable onPress={() => onMarkConsumed(entry.id)} accessibilityRole="button" hitSlop={10}>
-              <AppText variant="footnoteEmphasized">Tandai dikonsumsi</AppText>
-            </Pressable>
-          </View>
-        ) : null}
-      </View>
-    </Pressable>
+    <View style={styles.slot}>
+      <Pressable
+        onPress={() => onOpen(entry.id)}
+        accessibilityRole="button"
+        accessibilityLabel={`${SLOT_LABEL[slot]}, ${entry.title}, ${status}`}
+        style={({ pressed }) => [styles.entry, pressed && styles.pressed]}
+      >
+        <Icon name={consumed ? 'consumed' : 'planned'} size={22} color={colors.brandGreen} />
+        <View style={styles.slotText}>
+          <AppText variant="footnote" tone="secondary">{SLOT_LABEL[slot]}</AppText>
+          <AppText variant="headline">{entry.title}</AppText>
+          <AppText variant="footnote" tone="secondary">{status}</AppText>
+        </View>
+        <Icon name="chev-right" size={18} color={colors.labelSecondary} />
+      </Pressable>
+      {showSync || !consumed ? (
+        <View style={styles.entryActions}>
+          {showSync ? <StatusChip status={syncChip[entry.syncStatus]} /> : entry.outcome ? (
+            <StatusChip status={outcomeChip[entry.outcome]} />
+          ) : null}
+          {!consumed && !showSync ? (
+            <ActionLink label="Tandai dikonsumsi" chevron={false} onPress={() => onMarkConsumed(entry.id)} />
+          ) : null}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  header: { flexDirection: 'row', gap: spacing.s, paddingTop: spacing.s, alignItems: 'flex-start' },
-  headerStacked: { flexDirection: 'column' },
-  quickActions: { flexDirection: 'row', gap: spacing.s, alignItems: 'center' },
-  logLink: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 2, paddingBottom: 4, alignSelf: 'flex-start' },
-  meter: { paddingVertical: 10, gap: 6, borderBottomWidth: 1, borderBottomColor: colors.labelQuaternary },
-  meterRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.s },
-  wrapRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.s },
-  emptyIntake: { backgroundColor: colors.neutralYellowGray, borderRadius: radius.surface, padding: spacing.l, gap: spacing.s },
-  emptySlotRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.labelQuaternary,
-    minHeight: 48,
-  },
-  slot: {
-    flexDirection: 'row',
-    gap: spacing.m,
-    paddingVertical: spacing.m,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.labelQuaternary,
-    alignItems: 'flex-start',
-  },
-  slotText: { flex: 1, gap: 2 },
+  intro: { paddingTop: spacing.xs, gap: spacing.s },
+  brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.s },
+  wordmark: { flexShrink: 1, letterSpacing: -0.3 },
+  syncButton: { borderWidth: 1, borderColor: colors.borderStrong },
+  quickActions: { flexDirection: 'row', gap: spacing.s },
+  stack: { flexDirection: 'column' },
+  primaryAction: { flex: 1.15 },
+  secondaryAction: { flex: 1 },
+  section: { gap: spacing.xs },
+  intake: { backgroundColor: colors.neutralGreenGray, padding: spacing.l, borderRadius: radius.verdict, gap: spacing.s },
+  emptyHint: { marginTop: spacing.xs },
+  figures: { flexDirection: 'row', gap: spacing.m },
+  metric: { flex: 1, minWidth: 0, gap: spacing.xs },
+  figuresValue: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: spacing.xs },
+  verticalDivider: { width: 1, backgroundColor: colors.labelQuaternary },
+  horizontalDivider: { height: 1, backgroundColor: colors.labelQuaternary },
+  intakeFooter: { flexDirection: 'row', alignItems: 'center', gap: spacing.s, flexWrap: 'wrap' },
+  detailLine: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.s },
+  slot: { borderBottomWidth: 1, borderBottomColor: colors.labelQuaternary },
+  emptySlot: { minHeight: MIN_TOUCH, flexDirection: 'row', alignItems: 'center', gap: spacing.s, paddingVertical: spacing.s },
+  entry: { minHeight: MIN_TOUCH, flexDirection: 'row', alignItems: 'center', gap: spacing.m, paddingVertical: spacing.m },
+  slotText: { flex: 1, minWidth: 0, gap: spacing.xxs },
+  entryActions: { paddingLeft: 34, paddingBottom: spacing.xs, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.s },
+  pressed: { backgroundColor: colors.neutralYellowGray },
 });

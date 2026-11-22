@@ -63,7 +63,7 @@ export function StatusChip({ status, style }: StatusChipProps) {
   return (
     <View style={[styles.chip, spec.surface, style]} accessible accessibilityRole="text" accessibilityLabel={status}>
       <Icon name={spec.icon} size={16} color={spec.iconColor ?? colors.labelPrimary} />
-      <AppText variant="footnoteEmphasized">{status}</AppText>
+      <AppText variant="caption1Emphasized" style={styles.label}>{status}</AppText>
     </View>
   );
 }
@@ -94,6 +94,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
+    maxWidth: '100%',
     gap: 6,
     paddingTop: 5,
     paddingBottom: 5,
@@ -101,4 +102,5 @@ const styles = StyleSheet.create({
     paddingRight: 10,
     borderRadius: radius.chip,
   },
+  label: { flexShrink: 1 },
 });

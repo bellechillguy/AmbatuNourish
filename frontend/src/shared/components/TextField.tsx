@@ -51,12 +51,12 @@ export const TextField = forwardRef<TextInputInstance, TextFieldProps>(function 
   const state = disabled ? 'disabled' : error ? 'error' : focused ? 'focused' : 'default';
   const borderStyle =
     state === 'error'
-      ? { borderColor: colors.stateError, borderWidth: 2 }
+      ? { borderColor: colors.stateError, borderWidth: 1.5 }
       : state === 'focused'
-        ? { borderColor: colors.labelPrimary, borderWidth: 2 }
+        ? { borderColor: colors.brandGreen, borderWidth: 1.5 }
         : state === 'disabled'
           ? { borderColor: colors.labelSecondary, borderWidth: 1.5 }
-          : { borderColor: colors.labelSecondary, borderWidth: 1 };
+          : { borderColor: colors.borderStrong, borderWidth: 1.5 };
 
   const a11yHint = error ?? helper;
 
@@ -146,8 +146,8 @@ const styles = StyleSheet.create({
   container: { gap: 6 },
   input: {
     minHeight: 52,
-    borderRadius: radius.field,
     backgroundColor: colors.neutralWhite,
+    borderRadius: radius.field,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.s,
@@ -155,5 +155,5 @@ const styles = StyleSheet.create({
   },
   flex: { flex: 1 },
   helper: { flexDirection: 'row', gap: 6, alignItems: 'flex-start' },
-  trailing: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -10 },
+  trailing: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', marginRight: -10 },
 });

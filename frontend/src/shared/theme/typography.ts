@@ -1,30 +1,30 @@
 import type { TextStyle } from 'react-native';
 
-/**
- * Text styles lokal Figma (Public Sans, OFL, dibundel identik di iOS & Android).
- * Nama varian = nama style Figma tanpa spasi, mis. "Title 2/Regular" → title2.
- */
+/** Lora untuk judul utama. Public Sans untuk kontrol, isi, dan angka. */
 export const fontFamily = {
+  display: 'Lora_500Medium',
   regular: 'PublicSans_400Regular',
   semibold: 'PublicSans_600SemiBold',
+  bold: 'PublicSans_700Bold',
   italic: 'PublicSans_400Regular_Italic',
-  semiboldItalic: 'PublicSans_600SemiBold_Italic',
 } as const;
 
-const style = (family: string, size: number, lineHeight: number): TextStyle => ({
+const style = (family: string, size: number, lineHeight: number, letterSpacing = 0): TextStyle => ({
   fontFamily: family,
   fontSize: size,
   lineHeight,
-  letterSpacing: 0,
+  letterSpacing,
 });
 
 export const typography = {
-  largeTitle: style(fontFamily.semibold, 32, 40),
-  title1: style(fontFamily.semibold, 28, 34),
-  title2: style(fontFamily.semibold, 22, 28),
+  display: style(fontFamily.display, 40, 48, -1.3),
+  largeTitle: style(fontFamily.display, 34, 42, -0.9),
+  title1: style(fontFamily.display, 30, 38, -0.55),
+  title2: style(fontFamily.bold, 22, 28, -0.5),
+  figure: { ...style(fontFamily.semibold, 31, 36, -1), fontVariant: ['tabular-nums'] } as TextStyle,
   title3: style(fontFamily.regular, 20, 26),
   title3Emphasized: style(fontFamily.semibold, 20, 26),
-  headline: style(fontFamily.semibold, 17, 24),
+  headline: style(fontFamily.bold, 17, 24, -0.2),
   headlineRegular: style(fontFamily.regular, 17, 24),
   body: style(fontFamily.regular, 17, 24),
   bodyEmphasized: style(fontFamily.semibold, 17, 24),

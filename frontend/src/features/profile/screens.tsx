@@ -2,7 +2,7 @@
  * 14. Profil & Pengaturan — N1 profil, N2 ubah profil, N3 tampilan & aksesibilitas, N4 keluar.
  * Field identitas dari Identity & Access (PENDING); tidak menambah field tanpa persetujuan.
  */
-import React, { useState, type ReactNode } from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useRootNav } from '../../app/navigation/types';
@@ -10,6 +10,7 @@ import { config } from '../../shared/api/config';
 import { errorMessage } from '../../shared/api/errors';
 import {
   ActionBar,
+  ActionLink,
   AppText,
   Banner,
   Button,
@@ -18,7 +19,6 @@ import {
   InfoNote,
   Screen,
   SectionHeader,
-  StatusChip,
   TextField,
   Toggle,
   TopAppBar,
@@ -31,7 +31,7 @@ import { useUiPrefs } from '../../shared/state/PreferencesUiProvider';
 import { useSession } from '../../shared/state/SessionProvider';
 import { useAsync } from '../../shared/state/useAsync';
 import { useOfflineData } from '../../shared/sync/OfflineDataProvider';
-import { colors, radius, spacing } from '../../shared/theme';
+import { MIN_TOUCH, colors, radius, spacing } from '../../shared/theme';
 import { assessmentService } from '../../services/assessment';
 import { consumptionService } from '../../services/consumption';
 import { identityService } from '../../services/identity';
@@ -66,7 +66,7 @@ export function ProfileScreen() {
   return (
     <Screen
       inTabs
-      gap={spacing.s}
+      gap={spacing.xl}
       overlay={
         <Dialog
           visible={confirm}
@@ -104,43 +104,42 @@ export function ProfileScreen() {
         Profil
       </AppText>
       <View style={styles.identity}>
-        <View style={styles.avatar} accessible={false}>
-          <AppText variant="title3Emphasized">{initials(user?.name ?? '')}</AppText>
+        <View style={styles.avatar} accessible={false} importantForAccessibility="no-hide-descendants">
+          <AppText variant="subheadlineEmphasized" tone="onBrand" maxFontSizeMultiplier={1.5}>{initials(user?.name ?? '')}</AppText>
         </View>
-        <View style={styles.flex}>
-          <AppText variant="title3Emphasized">{user?.name}</AppText>
-          <AppText variant="footnote" tone="secondary">
-            {user?.email}
-          </AppText>
+        <View style={styles.identityText}>
+          <AppText variant="title2">{user?.name}</AppText>
+          <AppText variant="footnote" tone="secondary">{user?.email}</AppText>
         </View>
-        <Pressable onPress={() => nav.navigate('EditProfile')} accessibilityRole="button" accessibilityLabel="Ubah profil" hitSlop={12}>
-          <AppText variant="subheadlineEmphasized">Ubah</AppText>
-        </Pressable>
+        <ActionLink label="Ubah profil" onPress={() => nav.navigate('EditProfile')} />
       </View>
 
-      <SettingsRow
-        icon="sliders"
-        title="Profil Preferensi"
-        subtitle={prefs.data ? `${activePrefs} preferensi aktif` : undefined}
-        onPress={() => nav.navigate('Main', { screen: 'ProfileTab', params: { screen: 'Preferences' } })}
-      />
-      <SettingsRow icon="lock" title="Nutrition Plan" subtitle="Dari Ambatufit, hanya baca" onPress={() => nav.navigate('NutritionPlan')} />
-      <SettingsRow icon="refresh" title="Status sinkronisasi" onPress={() => nav.navigate('SyncStatus')}>
-        <StatusChip status={syncChip[status]} />
-      </SettingsRow>
-      <SettingsRow
-        icon="eye"
-        title="Tampilan & aksesibilitas"
-        subtitle="Ukuran teks mengikuti perangkat"
-        onPress={() => nav.navigate('AccessibilitySettings')}
-      />
-      <SettingsRow icon="info" title="Tentang AmbatuNourish" subtitle="Sumber data, batasan, dan privasi" onPress={() => nav.navigate('About')} />
-      <Pressable onPress={() => setConfirm(true)} accessibilityRole="button" style={styles.settingsRow}>
-        <Icon name="logout" size={22} color={colors.stateError} />
-        <AppText variant="body" tone="error" style={styles.flex}>
-          Keluar
-        </AppText>
-      </Pressable>
+      <View>
+        <SectionHeader title="Preferensi dan data" variant="headline" />
+        <SettingsRow
+          icon="sliders"
+          title="Profil Preferensi"
+          subtitle={prefs.data ? `${activePrefs} preferensi aktif` : undefined}
+          onPress={() => nav.navigate('Main', { screen: 'ProfileTab', params: { screen: 'Preferences' } })}
+        />
+        <SettingsRow icon="lock" title="Nutrition Plan" subtitle="Dari Ambatufit, hanya baca" onPress={() => nav.navigate('NutritionPlan')} />
+        <SettingsRow icon="refresh" title="Status sinkronisasi" subtitle={syncChip[status]} onPress={() => nav.navigate('SyncStatus')} />
+      </View>
+
+      <View>
+        <SectionHeader title="Pengaturan" variant="headline" />
+        <SettingsRow
+          icon="eye"
+          title="Tampilan & aksesibilitas"
+          subtitle="Ukuran teks mengikuti perangkat"
+          onPress={() => nav.navigate('AccessibilitySettings')}
+        />
+        <SettingsRow icon="info" title="Tentang AmbatuNourish" subtitle="Sumber data, batasan, dan privasi" onPress={() => nav.navigate('About')} />
+        <Pressable onPress={() => setConfirm(true)} accessibilityRole="button" style={({ pressed }) => [styles.settingsRow, pressed && styles.pressed]}>
+          <Icon name="logout" size={20} color={colors.stateError} />
+          <AppText variant="subheadlineEmphasized" tone="error" style={styles.flex}>Keluar</AppText>
+        </Pressable>
+      </View>
     </Screen>
   );
 }
@@ -150,27 +149,25 @@ function SettingsRow({
   title,
   subtitle,
   onPress,
-  children,
 }: {
   icon: IconName;
   title: string;
   subtitle?: string;
   onPress: () => void;
-  children?: ReactNode;
 }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={[title, subtitle].filter(Boolean).join(', ')} style={styles.settingsRow}>
-      <Icon name={icon} size={22} />
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={[title, subtitle].filter(Boolean).join(', ')}
+      style={({ pressed }) => [styles.settingsRow, pressed && styles.pressed]}
+    >
+      <Icon name={icon} size={20} color={colors.labelSecondary} />
       <View style={styles.flex}>
-        <AppText variant="body">{title}</AppText>
-        {subtitle ? (
-          <AppText variant="footnote" tone="secondary">
-            {subtitle}
-          </AppText>
-        ) : null}
+        <AppText variant="subheadlineEmphasized">{title}</AppText>
+        {subtitle ? <AppText variant="footnote" tone="secondary">{subtitle}</AppText> : null}
       </View>
-      {children}
-      <Icon name="chev-right" size={20} />
+      <Icon name="chev-right" size={18} color={colors.labelSecondary} />
     </Pressable>
   );
 }
@@ -376,9 +373,13 @@ export function AboutScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  identity: { flexDirection: 'row', alignItems: 'center', gap: spacing.m, paddingTop: spacing.s, paddingBottom: spacing.m },
-  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.brandYellow, alignItems: 'center', justifyContent: 'center' },
+  flex: { flex: 1, minWidth: 0 },
+  identity: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.m,
+    padding: spacing.l, borderRadius: radius.verdict, backgroundColor: colors.neutralGreenGray },
+  identityText: { flexGrow: 1, flexShrink: 1, flexBasis: 140, gap: spacing.xxs },
+  avatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: colors.brandGreen,
+    alignItems: 'center', justifyContent: 'center' },
+  pressed: { backgroundColor: colors.neutralYellowGray },
   settingsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -386,7 +387,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: colors.labelQuaternary,
-    minHeight: 53,
+    minHeight: MIN_TOUCH,
   },
   preview: { backgroundColor: colors.neutralYellowGray, borderRadius: radius.surface, padding: spacing.l, gap: 6 },
   toggleRow: {

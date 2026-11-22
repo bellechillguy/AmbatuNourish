@@ -4,7 +4,7 @@
  * Field & aturan kata sandi mengikuti Identity & Access API (PENDING) — tidak di-hard-code.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, View, type TextInputInstance } from 'react-native';
+import { AccessibilityInfo, Image, Pressable, StyleSheet, View, useWindowDimensions, type TextInputInstance } from 'react-native';
 
 import { useRootNav } from '../../app/navigation/types';
 import { errorMessage, toAppError } from '../../shared/api/errors';
@@ -14,14 +14,12 @@ import {
   AppText,
   Button,
   Icon,
-  NutrientRow,
   Screen,
-  StatusChip,
   TextField,
   TopAppBar,
 } from '../../shared/components';
 import { useSession } from '../../shared/state/SessionProvider';
-import { colors, radius, spacing } from '../../shared/theme';
+import { CONTENT_MAX_WIDTH, colors, radius, spacing } from '../../shared/theme';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const emailError = (v: string) =>
@@ -31,41 +29,37 @@ const emailError = (v: string) =>
 
 export function WelcomeScreen() {
   const nav = useRootNav();
+  const { width, height } = useWindowDimensions();
+  const contentWidth = Math.min(width, CONTENT_MAX_WIDTH) - spacing.screen * 2;
+  const photoHeight = Math.max(100, Math.min(254, contentWidth / 1.6, height / 3));
   return (
     <Screen
-      gap={spacing.xl}
-      contentStyle={{ paddingTop: spacing.xl, paddingBottom: spacing.l }}
+      showHeaderGradient={false}
+      gap={spacing.l}
+      contentStyle={styles.welcome}
       actionBar={
         <ActionBar bordered={false}>
           <Button label="Buat akun" onPress={() => nav.navigate('Register')} />
           <Button label="Masuk" type="secondary" onPress={() => nav.navigate('Login')} />
           <AppText variant="caption1" tone="secondary" align="center">
-            AmbatuNourish membantu keputusan makan sehari-hari dan bukan alat diagnosis medis.
+            Informasi gizi untuk keputusan makan sehari-hari.
           </AppText>
         </ActionBar>
       }
     >
-      <AppText variant="headline">AmbatuNourish</AppText>
-
-      {/* Ilustrasi label gizi — DATA CONTOH, dibaca sebagai satu elemen */}
-      <View style={styles.labelIllustration} accessible accessibilityLabel="Contoh label gizi">
-        <AppText variant="title3Emphasized">Informasi Nilai Gizi</AppText>
-        <AppText variant="caption1" tone="secondary">
-          per 100 g, per porsi Anda
+      <AppText variant="subheadlineEmphasized" style={styles.wordmark}>AmbatuNourish</AppText>
+      <Image
+        source={require('../../../assets/welcome-meal.jpg')}
+        resizeMode="cover"
+        style={[styles.welcomePhoto, { height: photoHeight }]}
+        accessible={false}
+        importantForAccessibility="no-hide-descendants"
+      />
+      <View style={styles.welcomeCopy}>
+        <AppText variant="display" accessibilityRole="header">Kenali pilihan makan Anda</AppText>
+        <AppText variant="body" tone="secondary">
+          Pindai produk, pahami nilai gizinya, lalu catat apa yang Anda makan.
         </AppText>
-        <NutrientRow nutrient="sugar" valueA={12.4} valueB={3.1} />
-        <NutrientRow nutrient="transFat" valueA={0} valueB={0} />
-        <NutrientRow nutrient="sodium" valueA={null} valueB={null} />
-      </View>
-
-      <AppText variant="title1">Pahami makanan kemasan, sebelum masuk ke piring</AppText>
-      <AppText variant="callout" tone="secondary">
-        Nilai gizi ditampilkan sesuai porsi Anda. Jika datanya tidak ada, kami bilang tidak ada, bukan nol.
-      </AppText>
-      <View style={styles.chips}>
-        <StatusChip status="Cocok" />
-        <StatusChip status="Kurang Cocok" />
-        <StatusChip status="Belum Dapat Dinilai" />
       </View>
     </Screen>
   );
@@ -513,15 +507,10 @@ function Checkbox({
 }
 
 const styles = StyleSheet.create({
-  labelIllustration: {
-    borderWidth: 1.5,
-    borderColor: colors.labelPrimary,
-    borderRadius: 4,
-    paddingVertical: 14,
-    paddingHorizontal: spacing.l,
-    backgroundColor: colors.neutralWhite,
-  },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s },
+  welcome: { paddingTop: spacing.l, paddingBottom: spacing.s },
+  wordmark: { color: colors.brandGreen, letterSpacing: -0.2 },
+  welcomePhoto: { width: '100%', borderRadius: radius.verdict, backgroundColor: colors.neutralGreenGray },
+  welcomeCopy: { gap: spacing.s },
   mark: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
   planNote: { backgroundColor: colors.neutralYellowGray, borderRadius: radius.surface, padding: spacing.l, gap: 6 },
   row8: { flexDirection: 'row', alignItems: 'center', gap: spacing.s },

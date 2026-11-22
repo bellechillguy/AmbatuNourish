@@ -1,20 +1,18 @@
-/**
- * Tab Rencana: Kalender (J1 harian, J2 mingguan, J3 sheet) dan Favorit (I1 daftar, I2 kosong).
- * Rencana ≠ catatan konsumsi: Direncanakan = garis putus-putus + ikon ◌;
- * Dikonsumsi = tint + ikon ● + waktu (bentuk DAN label berbeda, bukan warna saja).
- */
+/** Kalender makan, dengan ikon dan label status pada setiap rencana. */
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { useRootNav } from '../../app/navigation/types';
 import {
+  ActionLink,
   AppText,
-  Button,
+  Banner,
   Icon,
   ListRow,
   Screen,
   SegmentedControl,
+  Skeleton,
   StatusChip,
   SubNavigation,
   Tile,
@@ -23,10 +21,11 @@ import {
 } from '../../shared/components';
 import { SLOT_LABEL, SLOT_ORDER, SLOT_SHORT } from '../../shared/domain/nutrients';
 import type { MealPlanEntry, MealSlot } from '../../shared/domain/types';
+import { useSession } from '../../shared/state/SessionProvider';
 import { useAsync } from '../../shared/state/useAsync';
 import { useOfflineData } from '../../shared/sync/OfflineDataProvider';
-import { colors, radius, spacing } from '../../shared/theme';
-import { addDays, dayShort, formatTime, formatWeekRange, fromDateKey, todayKey, weekDays } from '../../shared/utils/date';
+import { CONTENT_MAX_WIDTH, MIN_TOUCH, colors, radius, spacing } from '../../shared/theme';
+import { addDays, dayShort, formatDayShortMonth, formatTime, formatWeekRange, fromDateKey, todayKey, weekDays } from '../../shared/utils/date';
 import { mealPlanningService } from '../../services/mealPlanning';
 import { AddToSlotSheet, type PrefillProduct } from './AddToSlotSheet';
 
@@ -79,17 +78,19 @@ export function PlanHomeScreen({ route }: { route: { params?: Params } }) {
         ) : null
       }
     >
-      <AppText variant="largeTitle" accessibilityRole="header">
-        Rencana Makan
-      </AppText>
-      <SubNavigation
-        items={[
-          { value: 'calendar', label: 'Kalender' },
-          { value: 'favorites', label: 'Favorit' },
-        ]}
-        value={view}
-        onChange={setView}
-      />
+      <View style={styles.heading}>
+        <AppText variant="largeTitle" accessibilityRole="header">
+          Rencana Makan
+        </AppText>
+        <SubNavigation
+          items={[
+            { value: 'calendar', label: 'Kalender' },
+            { value: 'favorites', label: 'Favorit' },
+          ]}
+          value={view}
+          onChange={setView}
+        />
+      </View>
       {view === 'calendar' ? (
         <>
           <SegmentedControl
@@ -128,35 +129,12 @@ function DailyView({ date, onSelectDate, onAdd }: { date: string; onSelectDate: 
   const nav = useRootNav();
   const { plans } = useOfflineData();
   const today = todayKey();
-  const days = weekDays(date);
   const isFuture = date > today;
 
   return (
     <>
-      <View style={styles.weekStrip} accessibilityRole="tablist">
-        {days.map((d) => {
-          const selected = d === date;
-          const isToday = d === today;
-          return (
-            <Pressable
-              key={d}
-              onPress={() => onSelectDate(d)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected }}
-              accessibilityLabel={`${dayShort(d)} ${fromDateKey(d).getDate()}${isToday ? ', hari ini' : ''}`}
-              style={[styles.day, selected && styles.daySelected, isToday && !selected && styles.dayToday]}
-            >
-              <AppText variant="caption1" tone={selected ? 'inverse' : 'secondary'}>
-                {dayShort(d)}
-              </AppText>
-              <AppText variant="headline" tone={selected ? 'inverse' : 'primary'}>
-                {fromDateKey(d).getDate()}
-              </AppText>
-            </Pressable>
-          );
-        })}
-      </View>
-      <Legend />
+      <WeekStrip date={date} today={today} onSelect={onSelectDate} />
+      <AppText variant="title2" accessibilityRole="header">{formatDayShortMonth(date)}</AppText>
       {SLOT_ORDER.map((slot) => {
         const entries = plans.filter((p) => p.date === date && p.slot === slot);
         return (
@@ -165,7 +143,7 @@ function DailyView({ date, onSelectDate, onAdd }: { date: string; onSelectDate: 
               <AppText variant="headline" style={styles.flex} accessibilityRole="header">
                 {SLOT_LABEL[slot]}
               </AppText>
-              <Pressable onPress={() => onAdd(slot)} accessibilityRole="button" accessibilityLabel={`Tambah ke ${SLOT_LABEL[slot]}`} style={styles.addBtn} hitSlop={4}>
+              <Pressable onPress={() => onAdd(slot)} accessibilityRole="button" accessibilityLabel={`Tambah ke ${SLOT_LABEL[slot]}`} style={({ pressed }) => [styles.addBtn, pressed && styles.pressed]}>
                 <Icon name="plus" size={18} />
               </Pressable>
             </View>
@@ -175,7 +153,7 @@ function DailyView({ date, onSelectDate, onAdd }: { date: string; onSelectDate: 
               </AppText>
             ) : (
               entries.map((e) => (
-                <PlanEntryCard
+                <PlanEntryRow
                   key={e.id}
                   entry={e}
                   canMarkConsumed={!isFuture}
@@ -191,7 +169,38 @@ function DailyView({ date, onSelectDate, onAdd }: { date: string; onSelectDate: 
   );
 }
 
-function PlanEntryCard({
+function WeekStrip({ date, today, onSelect }: { date: string; today: string; onSelect: (date: string) => void }) {
+  const { width, fontScale } = useWindowDimensions();
+  const days = weekDays(date);
+  const contentWidth = Math.min(width, CONTENT_MAX_WIDTH) - spacing.screen * 2;
+  const compact = fontScale > 1.3 || contentWidth < MIN_TOUCH * 7 + spacing.xxs * 6;
+  const dayWidth = compact ? Math.floor((contentWidth - spacing.xxs * 3) / 4) : undefined;
+
+  const buttons = days.map((day) => {
+    const active = date === day;
+    const isToday = day === today;
+    return (
+      <Pressable
+        key={day}
+        onPress={() => onSelect(day)}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: active }}
+        accessibilityLabel={`${formatDayShortMonth(day)}${isToday ? ', hari ini' : ''}`}
+        style={[styles.day, compact ? { width: dayWidth } : styles.dayFluid,
+          active ? styles.daySelected : isToday ? styles.dayToday : undefined]}
+      >
+        <AppText variant="caption1" tone={active ? 'inverse' : 'secondary'}>{dayShort(day)}</AppText>
+        <AppText variant="headline" tone={active ? 'inverse' : 'primary'} style={styles.dayNumber}>
+          {fromDateKey(day).getDate()}
+        </AppText>
+      </Pressable>
+    );
+  });
+
+  return <View style={[styles.weekStrip, compact && styles.weekStripWrap]} accessibilityRole="tablist">{buttons}</View>;
+}
+
+function PlanEntryRow({
   entry,
   canMarkConsumed,
   onOpen,
@@ -203,39 +212,39 @@ function PlanEntryCard({
   onMarkConsumed: () => void;
 }) {
   const consumed = entry.status === 'CONSUMED';
-  const needsSyncChip = entry.syncStatus !== 'SYNCED';
+  const needsSync = entry.syncStatus !== 'SYNCED';
+  const status = consumed
+    ? entry.consumedAt ? `Dikonsumsi ${formatTime(entry.consumedAt)}` : 'Dikonsumsi'
+    : 'Direncanakan';
+  const portions = entry.items.length === 1 ? `${entry.items[0].quantity} ${entry.items[0].unit}` : `${entry.items.length} item`;
+
   return (
-    <Pressable
-      onPress={onOpen}
-      accessibilityRole="button"
-      accessibilityLabel={`${entry.title}, ${consumed ? `dikonsumsi ${entry.consumedAt ? formatTime(entry.consumedAt) : ''}` : 'direncanakan'}`}
-      style={[styles.entry, consumed ? styles.entryConsumed : styles.entryPlanned]}
-    >
-      <Icon name={consumed ? 'consumed' : 'planned'} size={24} />
-      <View style={[styles.flex, { gap: spacing.xs }]}>
-        <AppText variant="subheadlineEmphasized">{entry.title}</AppText>
-        <AppText variant="footnote" tone="secondary">
-          {consumed
-            ? `Dikonsumsi ${entry.consumedAt ? formatTime(entry.consumedAt) : ''}, dari rencana`
-            : `Direncanakan, ${entry.items.length > 1 ? '1 porsi' : `${entry.items[0]?.quantity ?? ''} ${entry.items[0]?.unit ?? ''}`}`}
-        </AppText>
-        {needsSyncChip || (!consumed && (entry.outcome || canMarkConsumed)) ? (
-          <View style={styles.wrap}>
-            {needsSyncChip ? <StatusChip status={syncChip[entry.syncStatus]} /> : null}
-            {!consumed && entry.outcome ? <StatusChip status={outcomeChip[entry.outcome]} /> : null}
-            {!consumed && canMarkConsumed ? (
-              <Pressable onPress={onMarkConsumed} accessibilityRole="button" hitSlop={10}>
-                <AppText variant="footnoteEmphasized">Tandai dikonsumsi</AppText>
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
-      </View>
-    </Pressable>
+    <View style={[styles.planRow, consumed && styles.entryConsumed]}>
+      <Pressable
+        onPress={onOpen}
+        accessibilityRole="button"
+        accessibilityLabel={`${entry.title}, ${status}, ${portions}`}
+        style={({ pressed }) => [styles.entry, pressed && styles.pressed]}
+      >
+        <Icon name={consumed ? 'consumed' : 'planned'} size={22} color={colors.brandGreen} />
+        <View style={styles.flex}>
+          <AppText variant="subheadlineEmphasized">{entry.title}</AppText>
+          <AppText variant="footnote" tone="secondary">{status} · {portions}</AppText>
+        </View>
+        <Icon name="chev-right" size={18} color={colors.labelSecondary} />
+      </Pressable>
+      {needsSync || (!consumed && (entry.outcome || canMarkConsumed)) ? (
+        <View style={styles.entryActions}>
+          {needsSync ? <StatusChip status={syncChip[entry.syncStatus]} /> : null}
+          {!consumed && entry.outcome ? <StatusChip status={outcomeChip[entry.outcome]} /> : null}
+          {!consumed && canMarkConsumed ? <ActionLink label="Tandai dikonsumsi" chevron={false} onPress={onMarkConsumed} /> : null}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
-function Legend({ withEmpty }: { withEmpty?: boolean }) {
+function Legend() {
   return (
     <View style={styles.legend}>
       <View style={styles.legendItem}>
@@ -246,12 +255,10 @@ function Legend({ withEmpty }: { withEmpty?: boolean }) {
         <Icon name="planned" size={16} />
         <AppText variant="caption1">Direncanakan</AppText>
       </View>
-      {withEmpty ? (
-        <View style={styles.legendItem}>
-          <Icon name="plus" size={14} />
-          <AppText variant="caption1">Kosong</AppText>
-        </View>
-      ) : null}
+      <View style={styles.legendItem}>
+        <Icon name="plus" size={14} />
+        <AppText variant="caption1">Kosong</AppText>
+      </View>
     </View>
   );
 }
@@ -271,7 +278,7 @@ function WeeklyView({
 }) {
   const nav = useRootNav();
   const { plans } = useOfflineData();
-  const { fontScale } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
   const today = todayKey();
   const days = weekDays(date);
   const byKey = useMemo(() => {
@@ -303,7 +310,7 @@ function WeeklyView({
   );
 
   // Teks ≥130%: matriks menjadi daftar per hari.
-  if (fontScale >= 1.3) {
+  if (width < 350 || fontScale >= 1.3) {
     return (
       <>
         {header}
@@ -351,7 +358,7 @@ function WeeklyView({
         const isToday = d === today;
         return (
           <View key={d} style={[styles.matrixRow, styles.matrixDataRow, isToday && styles.todayRow]}>
-            <Pressable onPress={() => onOpenDay(d)} accessibilityRole="button" accessibilityLabel={`Buka ${dayShort(d)} ${fromDateKey(d).getDate()}`} style={[styles.dayCol, { paddingLeft: 6 }]}>
+            <Pressable onPress={() => onOpenDay(d)} accessibilityRole="button" accessibilityLabel={`Buka ${dayShort(d)} ${fromDateKey(d).getDate()}`} style={[styles.dayCol, styles.dayLink]}>
               <AppText variant={isToday ? 'subheadlineEmphasized' : 'subheadline'}>{`${dayShort(d)} ${fromDateKey(d).getDate()}`}</AppText>
             </Pressable>
             {SLOT_ORDER.map((slot) => {
@@ -371,7 +378,7 @@ function WeeklyView({
           </View>
         );
       })}
-      <Legend withEmpty />
+      <Legend />
     </>
   );
 }
@@ -380,29 +387,27 @@ function WeeklyView({
 
 function FavoritesView() {
   const nav = useRootNav();
-  const favs = useAsync(() => mealPlanningService.listFavorites(), []);
+  const { user } = useSession();
+  const favs = useAsync(() => mealPlanningService.listFavorites(user?.id), [user?.id], { enabled: false });
   useFocusEffect(
     useCallback(() => {
       void favs.reload();
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []),
+    }, [favs.reload]),
   );
   const list = favs.data ?? [];
 
-  if (!favs.loading && list.length === 0) {
+  if (!favs.data && favs.loading) return <Skeleton width="100%" height={80} />;
+
+  if (favs.error && list.length === 0) {
+    return <Banner type="info" title="Favorit belum bisa dimuat" actionLabel="Coba lagi" onAction={favs.reload} />;
+  }
+
+  if (!list.length) {
     return (
       <View style={styles.empty}>
-        <View style={styles.emptyMark}>
-          <Icon name="heart" size={28} />
-        </View>
-        <AppText variant="title2">Simpan makanan yang sering Anda makan</AppText>
-        <AppText variant="subheadline" tone="secondary">
-          Favorit membuat pencatatan dan perencanaan jauh lebih cepat: cukup pilih, tanpa memindai ulang.
-        </AppText>
-        <Button label="Buat favorit" icon="plus" onPress={() => nav.navigate('FavoriteEdit')} />
-        <AppText variant="footnote" tone="secondary">
-          Atau ketuk ikon hati pada halaman produk.
-        </AppText>
+        <AppText variant="title2">Belum ada hidangan favorit</AppText>
+        <AppText variant="subheadline" tone="secondary">Simpan hidangan untuk dipakai lagi di rencana atau catatan makan.</AppText>
+        <ActionLink label="Buat favorit" onPress={() => nav.navigate('FavoriteEdit')} />
       </View>
     );
   }
@@ -413,9 +418,7 @@ function FavoritesView() {
         <AppText variant="footnoteEmphasized" tone="secondary" style={styles.flex}>
           {list.length} hidangan favorit
         </AppText>
-        <Pressable onPress={() => nav.navigate('FavoriteEdit')} accessibilityRole="button" hitSlop={10}>
-          <AppText variant="subheadlineEmphasized">Buat baru</AppText>
-        </Pressable>
+        <ActionLink label="Buat favorit" onPress={() => nav.navigate('FavoriteEdit')} />
       </View>
       {list.map((f) => (
         <ListRow
@@ -433,30 +436,38 @@ function FavoritesView() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  weekStrip: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.xs },
-  day: { flex: 1, maxWidth: 48, height: 60, borderRadius: radius.surface, alignItems: 'center', justifyContent: 'center', gap: 2 },
-  daySelected: { backgroundColor: colors.labelPrimary },
-  dayToday: { borderWidth: 1.5, borderColor: colors.labelPrimary },
+  flex: { flex: 1, minWidth: 0 },
+  heading: { gap: spacing.xs },
+  weekStrip: { flexDirection: 'row', gap: spacing.xxs },
+  weekStripWrap: { flexWrap: 'wrap' },
+  day: { minWidth: MIN_TOUCH, minHeight: 60, paddingVertical: spacing.s, borderRadius: radius.field,
+    alignItems: 'center', justifyContent: 'center' },
+  dayFluid: { flex: 1 },
+  daySelected: { backgroundColor: colors.brandGreen },
+  dayToday: { backgroundColor: colors.neutralGreenGray },
+  dayNumber: { fontVariant: ['tabular-nums'] },
   legend: { flexDirection: 'row', gap: spacing.m, alignItems: 'center', flexWrap: 'wrap' },
   legendItem: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   slotSection: { gap: spacing.s, paddingVertical: spacing.m, borderBottomWidth: 1, borderBottomColor: colors.labelQuaternary },
   slotHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.s },
-  addBtn: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: colors.labelSecondary, alignItems: 'center', justifyContent: 'center' },
-  entry: { flexDirection: 'row', gap: spacing.m, padding: spacing.m, borderRadius: radius.surface, alignItems: 'flex-start' },
+  addBtn: { width: MIN_TOUCH, height: MIN_TOUCH, borderRadius: radius.field, backgroundColor: colors.neutralGreenGray,
+    alignItems: 'center', justifyContent: 'center' },
+  planRow: { backgroundColor: colors.neutralWhite, borderRadius: radius.surface, overflow: 'hidden' },
+  entry: { minHeight: MIN_TOUCH, flexDirection: 'row', gap: spacing.m, padding: spacing.m, alignItems: 'flex-start' },
   entryConsumed: { backgroundColor: colors.neutralGreenGray },
-  entryPlanned: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.labelSecondary },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' },
+  entryActions: { paddingLeft: 46, paddingRight: spacing.s, paddingBottom: spacing.xs,
+    flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xs },
+  pressed: { backgroundColor: colors.neutralYellowGray },
   weekNav: { flexDirection: 'row', alignItems: 'center', gap: spacing.s },
-  navBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  navBtn: { width: MIN_TOUCH, height: MIN_TOUCH, alignItems: 'center', justifyContent: 'center' },
   matrixRow: { flexDirection: 'row', alignItems: 'center' },
   matrixHeader: { paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: colors.labelQuaternary },
   matrixDataRow: { paddingVertical: spacing.s, borderBottomWidth: 1, borderBottomColor: colors.labelQuaternary },
   todayRow: { backgroundColor: colors.neutralGreenGray, borderBottomColor: 'transparent' },
   dayCol: { width: 82 },
   cellCol: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  cell: { minHeight: 44 },
-  empty: { gap: 10, paddingTop: spacing.xl },
-  emptyMark: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.neutralOrangeGray, alignItems: 'center', justifyContent: 'center' },
+  cell: { minHeight: MIN_TOUCH },
+  dayLink: { minHeight: MIN_TOUCH, justifyContent: 'center' },
+  empty: { gap: spacing.s, padding: spacing.l, backgroundColor: colors.neutralYellowGray, borderRadius: radius.verdict },
   favHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.s },
 });

@@ -1,7 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { colors, radius, spacing } from '../theme';
+import { MIN_TOUCH, colors, radius, spacing } from '../theme';
 import { AppText } from './AppText';
 import { Icon, type IconName } from './Icon';
 
@@ -63,7 +63,7 @@ export function Button({
       ) : (
         <View style={styles.row}>
           {icon ? <Icon name={icon} size={20} color={fg} /> : null}
-          <AppText variant="headline" style={{ color: fg }} numberOfLines={2} align="center">
+          <AppText variant="subheadlineEmphasized" style={[styles.label, { color: fg }]} align="center">
             {label}
           </AppText>
         </View>
@@ -81,38 +81,37 @@ function foreground(variant: ButtonType | 'disabled', onDark: boolean): string {
     case 'disabled':
       return colors.labelSecondary;
     default:
-      return onDark ? colors.neutralWhite : colors.labelPrimary;
+      return onDark ? colors.neutralWhite : colors.brandGreen;
   }
 }
 
 function variantStyle(variant: ButtonType | 'disabled', onDark: boolean): ViewStyle {
   switch (variant) {
     case 'primary':
-      return { backgroundColor: colors.brandGreen, paddingVertical: 15, paddingHorizontal: 20 };
+      return { backgroundColor: colors.brandGreen };
     case 'secondary':
-      return {
-        borderWidth: 1.5,
-        borderColor: onDark ? colors.neutralWhite : colors.labelPrimary,
-        paddingVertical: 15,
-        paddingHorizontal: 20,
-      };
+      return { borderWidth: 1, borderColor: onDark ? colors.neutralWhite : colors.borderStrong,
+        backgroundColor: onDark ? 'transparent' : colors.neutralWhite };
     case 'destructive':
-      return { borderWidth: 1.5, borderColor: colors.stateError, paddingVertical: 15, paddingHorizontal: 20 };
+      return { borderWidth: 1, borderColor: colors.stateError };
     case 'disabled':
-      return { backgroundColor: colors.labelQuaternary, paddingVertical: 15, paddingHorizontal: 20 };
+      return { backgroundColor: colors.neutralYellowGray };
     default:
-      return { paddingVertical: 14, paddingHorizontal: 12 };
+      return {};
   }
 }
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 48,
+    minHeight: MIN_TOUCH,
+    paddingVertical: spacing.m,
+    paddingHorizontal: spacing.l,
     borderRadius: radius.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   full: { alignSelf: 'stretch' },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.s },
+  row: { maxWidth: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.s },
+  label: { flexShrink: 1 },
   pressed: { opacity: 0.85 },
 });

@@ -1,11 +1,10 @@
-import {
-  PublicSans_400Regular,
-  PublicSans_400Regular_Italic,
-  PublicSans_600SemiBold,
-  PublicSans_600SemiBold_Italic,
-  useFonts,
-} from '@expo-google-fonts/public-sans';
+import { Lora_500Medium } from '@expo-google-fonts/lora/500Medium';
+import { PublicSans_400Regular } from '@expo-google-fonts/public-sans/400Regular';
+import { PublicSans_400Regular_Italic } from '@expo-google-fonts/public-sans/400Regular_Italic';
+import { PublicSans_600SemiBold } from '@expo-google-fonts/public-sans/600SemiBold';
+import { PublicSans_700Bold } from '@expo-google-fonts/public-sans/700Bold';
 import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
+import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
@@ -24,24 +23,25 @@ void SplashScreen.preventAutoHideAsync();
 
 const navTheme = {
   ...DefaultTheme,
-  colors: { ...DefaultTheme.colors, background: colors.neutralWhite, card: colors.neutralWhite, text: colors.labelPrimary, primary: colors.brandGreen },
+  colors: { ...DefaultTheme.colors, background: colors.canvas, card: colors.neutralWhite, text: colors.labelPrimary, primary: colors.brandGreen },
 };
 
 function Gate() {
   const { ready } = useSession();
-  // Public Sans dibundel identik untuk iOS & Android (handoff: FONT v2).
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
+    Lora_500Medium,
     PublicSans_400Regular,
     PublicSans_600SemiBold,
     PublicSans_400Regular_Italic,
-    PublicSans_600SemiBold_Italic,
+    PublicSans_700Bold,
   });
+  const canRender = ready && (fontsLoaded || !!fontError);
 
   useEffect(() => {
-    if (ready && fontsLoaded) void SplashScreen.hideAsync();
-  }, [ready, fontsLoaded]);
+    if (canRender) void SplashScreen.hideAsync();
+  }, [canRender]);
 
-  if (!ready || !fontsLoaded) return null;
+  if (!canRender) return null;
 
   return (
     <NavigationContainer theme={navTheme}>

@@ -51,11 +51,11 @@ export function SyncStatusScreen() {
   const [conflictFor, setConflictFor] = useState<ConflictItem | null>(null);
   const failed = queue.filter((o) => o.status === 'FAILED').length;
   const allSynced = queue.length === 0 && conflicts.length === 0;
+  const header = <TopAppBar onLeading={() => nav.goBack()} title="Status sinkronisasi" />;
 
   if (allSynced) {
     return (
-      <Screen gap={10}>
-        <TopAppBar onLeading={() => nav.goBack()} title="Status sinkronisasi" />
+      <Screen gap={10} gradientHeader={header}>
         <View style={styles.done}>
           <View style={styles.doneMark}>
             <Icon name="cloud-check" size={28} />
@@ -74,6 +74,7 @@ export function SyncStatusScreen() {
   return (
     <Screen
       gap={10}
+      gradientHeader={header}
       actionBar={
         <ActionBar>
           <Button label="Sinkronkan sekarang" icon="refresh" onPress={() => void syncNow()} loading={syncing} disabled={!online} />
@@ -92,7 +93,6 @@ export function SyncStatusScreen() {
         ) : null
       }
     >
-      <TopAppBar onLeading={() => nav.goBack()} title="Status sinkronisasi" />
       {!online ? (
         <Banner type="offline" title="Anda sedang offline" message="Perubahan disimpan di perangkat dan dikirim otomatis saat online." />
       ) : syncing ? (

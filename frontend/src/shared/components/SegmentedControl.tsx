@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { colors, radius } from '../theme';
+import { MIN_TOUCH, colors, radius, spacing } from '../theme';
 import { AppText } from './AppText';
 
 interface SegmentedControlProps<T extends string> {
@@ -27,7 +27,8 @@ export function SegmentedControl<T extends string>({
         return (
           <Pressable
             key={o.value}
-            onPress={() => !disabled && onChange(o.value)}
+            onPress={() => onChange(o.value)}
+            disabled={disabled}
             accessibilityRole="tab"
             accessibilityState={{ selected, disabled }}
             accessibilityLabel={o.label}
@@ -46,14 +47,14 @@ export function SegmentedControl<T extends string>({
 const styles = StyleSheet.create({
   track: {
     flexDirection: 'row',
-    backgroundColor: colors.neutralGreenGray,
+    backgroundColor: colors.neutralYellowGray,
     borderRadius: radius.field,
     padding: 3,
-    minHeight: 40,
   },
   segment: {
     flex: 1,
-    minHeight: 34,
+    minHeight: MIN_TOUCH,
+    paddingVertical: spacing.xs,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,

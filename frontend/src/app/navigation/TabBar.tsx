@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '../../shared/components/AppText';
 import { Icon, type IconName } from '../../shared/components/Icon';
-import { colors, spacing } from '../../shared/theme';
+import { MIN_TOUCH, colors, spacing } from '../../shared/theme';
 
 const TABS: Record<string, { label: string; icon: IconName }> = {
   HomeTab: { label: 'Beranda', icon: 'home' },
@@ -16,53 +16,61 @@ const TABS: Record<string, { label: string; icon: IconName }> = {
 };
 
 /**
- * Navigation/Tab Bar — 62pt di atas inset bawah. Tab aktif: indikator pil Brand/Green 56×30,
- * label Caption 1/Emphasized. Mengetuk tab aktif kembali ke root stack.
+ * Tab tetap terlihat dengan ikon, label, dan penanda posisi aktif.
  */
 export function TabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={[styles.bar, { paddingBottom: Math.max(4, insets.bottom) }]} accessibilityRole="tablist">
-      {state.routes.map((route, index) => {
-        const focused = state.index === index;
-        const tab = TABS[route.name];
-        const onPress = () => {
-          const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-          // Re-tap tab aktif: native-stack menangani event tabPress dengan pop ke root.
-          if (!focused && !event.defaultPrevented) navigation.navigate(route.name as never);
-        };
-        return (
-          <Pressable
-            key={route.key}
-            onPress={onPress}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: focused }}
-            accessibilityLabel={tab.label}
-            style={styles.tab}
-          >
-            <View style={[styles.indicator, focused && styles.indicatorActive]}>
-              <Icon name={tab.icon} size={22} color={focused ? colors.onBrand : colors.labelSecondary} />
-            </View>
-            <AppText variant={focused ? 'caption1Emphasized' : 'caption1'} tone={focused ? 'primary' : 'secondary'} maxFontSizeMultiplier={1.4}>
-              {tab.label}
-            </AppText>
-          </Pressable>
-        );
-      })}
+    <View style={[styles.bar, { paddingBottom: Math.max(spacing.xs, insets.bottom) }]}>
+      <View style={styles.tabList} accessibilityRole="tablist">
+        {state.routes.map((route, index) => {
+          const focused = state.index === index;
+          const tab = TABS[route.name];
+          const onPress = () => {
+            const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+            // Re-tap tab aktif: native-stack menangani event tabPress dengan pop ke root.
+            if (!focused && !event.defaultPrevented) navigation.navigate(route.name as never);
+          };
+          return (
+            <Pressable
+              key={route.key}
+              onPress={onPress}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: focused }}
+              accessibilityLabel={tab.label}
+              onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })}
+              style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
+            >
+              <View style={[styles.marker, focused && styles.markerActive]} />
+              <Icon name={tab.icon} size={22} color={focused ? colors.brandGreen : colors.labelSecondary} />
+              <AppText
+                variant={focused ? 'caption2Emphasized' : 'caption2'}
+                tone="secondary"
+                style={focused && styles.activeLabel}
+                align="center"
+                maxFontSizeMultiplier={1.25}
+              >
+                {tab.label}
+              </AppText>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   bar: {
-    flexDirection: 'row',
     backgroundColor: colors.neutralWhite,
-    borderTopWidth: 1,
-    borderTopColor: colors.labelQuaternary,
-    paddingTop: 6,
-    paddingHorizontal: spacing.s,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderStrong,
+    paddingHorizontal: spacing.xs,
   },
-  tab: { flex: 1, alignItems: 'center', gap: 2, minHeight: 50 },
-  indicator: { width: 56, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  indicatorActive: { backgroundColor: colors.brandGreen },
+  tabList: { flexDirection: 'row', width: '100%', maxWidth: 640, alignSelf: 'center' },
+  tab: { flex: 1, minHeight: MIN_TOUCH, alignItems: 'center', gap: spacing.xs, paddingBottom: spacing.xs },
+  marker: { width: 22, height: 3, backgroundColor: 'transparent', marginBottom: spacing.xxs },
+  markerActive: { backgroundColor: colors.brandGreen, borderBottomLeftRadius: 2, borderBottomRightRadius: 2 },
+  activeLabel: { color: colors.brandGreen },
+  pressed: { backgroundColor: colors.neutralYellowGray },
 });

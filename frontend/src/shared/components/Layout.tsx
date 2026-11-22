@@ -1,18 +1,19 @@
-import React, { type ReactNode } from 'react';
+import React, { useId, useMemo, useState, type ReactNode } from 'react';
 import {
+  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   View,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { useUiPrefs } from '../state/PreferencesUiProvider';
-import { CONTENT_MAX_WIDTH, colors, radius, spacing } from '../theme';
+import { CONTENT_MAX_WIDTH, MIN_TOUCH, colors, radius, spacing } from '../theme';
 import { AppText } from './AppText';
 import { Icon, type IconName } from './Icon';
 
@@ -22,7 +23,10 @@ import { Icon, type IconName } from './Icon';
 
 interface ScreenProps {
   children: ReactNode;
-  /** Jarak antar-elemen konten (Figma: 8–20). */
+  /** Judul tetap di atas konten yang dapat digulir. */
+  gradientHeader?: ReactNode;
+  showHeaderGradient?: boolean;
+  /** Jarak antar-elemen konten. */
   gap?: number;
   /** Action Bar di bawah (tetap di atas keyboard). */
   actionBar?: ReactNode;
@@ -38,15 +42,16 @@ interface ScreenProps {
 }
 
 /**
- * Kerangka layar: safe area (tanpa hard-code 62/34), padding konten 4/16/24/16,
- * lebar maksimum 560 di tablet, Action Bar menempel di atas keyboard.
+ * Kerangka layar dengan safe area, kolom konten terpusat, dan tindakan di atas keyboard.
  */
 export function Screen({
   children,
-  gap = spacing.m,
+  gradientHeader,
+  showHeaderGradient = true,
+  gap = spacing.l,
   actionBar,
   scroll = true,
-  background = colors.neutralWhite,
+  background = showHeaderGradient ? colors.neutralWhite : colors.canvas,
   inTabs = false,
   overlay,
   contentStyle,
@@ -54,17 +59,34 @@ export function Screen({
   testID,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
+  // Match the top safe area and a standard title row so the color stays near the header.
+  const gradientHeight = insets.top + MIN_TOUCH + spacing.xl;
+  const mintStop = Math.max(spacing.xxl, insets.top) / gradientHeight;
+  const gradientId = `screen-header-${useId().replace(/:/g, '')}`;
+  const [scrollY] = useState(() => new Animated.Value(0));
+  const trackGradientScroll = showHeaderGradient && !gradientHeader && scroll;
+  const onScroll = useMemo(
+    () => Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: Platform.OS !== 'web' }),
+    [scrollY],
+  );
+  const gradientOffset = useMemo(() => scrollY.interpolate({
+    inputRange: [0, gradientHeight],
+    outputRange: [0, -gradientHeight],
+    extrapolate: 'clamp',
+  }), [gradientHeight, scrollY]);
   const content = (
     <View style={[styles.content, { gap }, contentStyle]}>{children}</View>
   );
   const body = scroll ? (
-    <ScrollView
+    <Animated.ScrollView
       contentContainerStyle={styles.scrollContent}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
+      onScroll={trackGradientScroll ? onScroll : undefined}
+      scrollEventThrottle={16}
     >
       {content}
-    </ScrollView>
+    </Animated.ScrollView>
   ) : (
     <View style={styles.fill}>{content}</View>
   );
@@ -73,10 +95,34 @@ export function Screen({
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={[styles.fill, { backgroundColor: background }]} testID={testID}>
+      {showHeaderGradient ? (
+        <View
+          pointerEvents="none"
+          importantForAccessibility="no-hide-descendants"
+          accessibilityElementsHidden
+          style={[styles.headerBackdrop, { height: gradientHeight }]}
+        >
+          <Animated.View style={[styles.fill, trackGradientScroll && { transform: [{ translateY: gradientOffset }] }]}>
+            <Svg width="100%" height="100%">
+              <Defs>
+                <LinearGradient id={gradientId} x1="0%" y1="0%" x2="0%" y2="100%">
+                  <Stop offset={0} stopColor={colors.headerGreen} />
+                  <Stop offset={mintStop} stopColor={colors.headerMint} />
+                  <Stop offset={1} stopColor={background} />
+                </LinearGradient>
+              </Defs>
+              <Rect width="100%" height="100%" fill={`url(#${gradientId})`} />
+            </Svg>
+          </Animated.View>
+        </View>
+      ) : null}
       <KeyboardAvoidingView
         style={styles.fill}
         behavior={Platform.OS === 'ios' && keyboard ? 'padding' : undefined}
       >
+        {gradientHeader ? (
+          <View style={styles.headerContent}>{gradientHeader}</View>
+        ) : null}
         <View style={[styles.fill, { paddingBottom: bottomInset }]}>{body}</View>
         {actionBar}
       </KeyboardAvoidingView>
@@ -96,7 +142,7 @@ export function ActionBar({ children, bordered = true }: { children: ReactNode; 
       style={[
         styles.actionBar,
         bordered && styles.actionBarBorder,
-        { paddingBottom: Math.max(spacing.s, insets.bottom) },
+        { paddingBottom: Math.max(spacing.m, insets.bottom) },
       ]}
     >
       <View style={styles.actionInner}>{children}</View>
@@ -115,7 +161,7 @@ interface TopAppBarProps {
   actions?: { icon: IconName; label: string; onPress: () => void }[];
 }
 
-/** Top App Bar 44pt: tombol kembali/tutup 44×44, judul Headline, aksi ikon 44×44. */
+/** Judul layar dan tindakan navigasi dalam area sentuh yang konsisten. */
 export function TopAppBar({ leading = 'back', onLeading, title, actions = [] }: TopAppBarProps) {
   return (
     <View style={styles.topBar}>
@@ -128,7 +174,7 @@ export function TopAppBar({ leading = 'back', onLeading, title, actions = [] }: 
       ) : null}
       <View style={styles.topTitle}>
         {title ? (
-          <AppText variant="headline" accessibilityRole="header" numberOfLines={2}>
+          <AppText variant="headline" accessibilityRole="header">
             {title}
           </AppText>
         ) : null}
@@ -160,7 +206,7 @@ export function IconButton({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.iconButton, pressed && { opacity: 0.6 }, style]}
+      style={({ pressed }) => [styles.iconButton, pressed && styles.controlPressed, style]}
     >
       <Icon name={icon} size={size} color={color} />
     </Pressable>
@@ -209,13 +255,15 @@ export function ActionLink({
       onPress={onPress}
       accessibilityRole="link"
       accessibilityLabel={label}
-      hitSlop={12}
       style={styles.actionLink}
     >
-      <AppText variant="subheadlineEmphasized" tone={tone} style={underlineLinks ? { textDecorationLine: 'underline' } : undefined}>
+      <AppText variant="footnoteEmphasized" tone={tone} style={[
+        tone === 'primary' && styles.linkText,
+        underlineLinks && styles.underlined,
+      ]}>
         {label}
       </AppText>
-      {chevron ? <Icon name="chev-right" size={20} /> : null}
+      {chevron ? <Icon name="chev-right" size={16} color={tone === 'error' ? colors.stateError : colors.brandGreen} /> : null}
     </Pressable>
   );
 }
@@ -399,7 +447,7 @@ export function Bullet({ children, emphasis = 'subheadlineEmphasized' }: { child
   );
 }
 
-/** Meter kemajuan netral (hitam di atas Green Gray), tanpa penilaian warna. */
+/** Meter kemajuan dengan warna yang konsisten untuk semua metrik. */
 export function Meter({ ratio, height = 6 }: { ratio: number; height?: number }) {
   const pct = Math.max(0, Math.min(1, ratio));
   return (
@@ -408,7 +456,7 @@ export function Meter({ ratio, height = 6 }: { ratio: number; height?: number })
       accessible={false}
       importantForAccessibility="no-hide-descendants"
     >
-      <View style={{ width: `${pct * 100}%`, height, borderRadius: height / 2, backgroundColor: colors.labelPrimary }} />
+      <View style={{ width: `${pct * 100}%`, height, borderRadius: height / 2, backgroundColor: colors.brandGreen }} />
     </View>
   );
 }
@@ -484,27 +532,38 @@ export function Divider() {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   flex: { flex: 1 },
+  headerBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, overflow: 'hidden' },
+  headerContent: {
+    width: '100%',
+    maxWidth: CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
+    paddingVertical: spacing.s,
+    paddingHorizontal: spacing.screen,
+  },
   scrollContent: { flexGrow: 1 },
   content: {
     width: '100%',
     maxWidth: CONTENT_MAX_WIDTH,
     alignSelf: 'center',
-    paddingTop: 4,
+    paddingTop: spacing.s,
     paddingHorizontal: spacing.screen,
     paddingBottom: spacing.xl,
   },
   actionBar: {
-    backgroundColor: colors.neutralWhite,
+    backgroundColor: colors.canvas,
     paddingTop: spacing.m,
     paddingHorizontal: spacing.screen,
   },
   actionBarBorder: { borderTopWidth: 1, borderTopColor: colors.labelQuaternary },
   actionInner: { width: '100%', maxWidth: CONTENT_MAX_WIDTH, alignSelf: 'center', gap: spacing.s },
-  topBar: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  topTitle: { flex: 1 },
-  iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.s, paddingTop: spacing.s },
-  actionLink: { flexDirection: 'row', alignItems: 'center', minHeight: 24 },
+  topBar: { minHeight: MIN_TOUCH, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  topTitle: { flex: 1, minWidth: 0 },
+  iconButton: { width: MIN_TOUCH, height: MIN_TOUCH, borderRadius: radius.field, alignItems: 'center', justifyContent: 'center' },
+  controlPressed: { backgroundColor: colors.neutralYellowGray },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.s, minHeight: 36 },
+  actionLink: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: MIN_TOUCH, flexShrink: 1 },
+  linkText: { color: colors.brandGreen, flexShrink: 1 },
+  underlined: { textDecorationLine: 'underline' },
   tile: { borderRadius: radius.tile, alignItems: 'center', justifyContent: 'center' },
   listRow: {
     flexDirection: 'row',
@@ -515,15 +574,17 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.labelQuaternary,
   },
   listText: { flex: 1, gap: spacing.xxs },
-  filterChip: { minHeight: 36, paddingHorizontal: 14, borderRadius: 18, justifyContent: 'center' },
-  filterSelected: { backgroundColor: colors.labelPrimary },
-  filterIdle: { borderWidth: 1, borderColor: colors.labelSecondary },
-  subNav: { flexDirection: 'row', gap: spacing.xl, alignItems: 'center' },
-  subNavItem: { minHeight: 36, paddingTop: 6, paddingBottom: 8, justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  filterChip: { minHeight: MIN_TOUCH, paddingHorizontal: 14, borderRadius: radius.field, justifyContent: 'center',
+    borderWidth: 1, borderColor: 'transparent' },
+  filterSelected: { backgroundColor: colors.brandGreen },
+  filterIdle: { borderColor: colors.borderStrong },
+  subNav: { flexDirection: 'row', gap: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.labelQuaternary },
+  subNavItem: { minHeight: MIN_TOUCH, paddingVertical: spacing.s, justifyContent: 'center',
+    borderBottomWidth: 2, borderBottomColor: 'transparent' },
   subNavActive: { borderBottomColor: colors.brandGreen },
   note: { flexDirection: 'row', gap: spacing.s, padding: spacing.m, borderRadius: radius.surface, alignItems: 'flex-start' },
   bullet: { flexDirection: 'row', gap: 10 },
-  track: { width: '100%', backgroundColor: colors.neutralGreenGray, overflow: 'hidden' },
+  track: { width: '100%', backgroundColor: colors.labelQuaternary, overflow: 'hidden' },
   radio: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   radioOn: { borderWidth: 2, borderColor: colors.labelPrimary },
   radioOff: { borderWidth: 1.5, borderColor: colors.labelSecondary },
