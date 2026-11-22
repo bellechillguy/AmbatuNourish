@@ -1,25 +1,40 @@
+// @ts-check
 import { config } from './config';
 import { AppError } from './errors';
 
-let authToken: string | null = null;
-let onUnauthorized: (() => void) | null = null;
+/** @type {string | null} */
+let authToken = null;
 
-export function setAuthToken(token: string | null) {
+/** @type {(() => void) | null} */
+let onUnauthorized = null;
+
+/** @param {string | null} token */
+export function setAuthToken(token) {
   authToken = token;
 }
 
-export function setUnauthorizedHandler(handler: (() => void) | null) {
+/** @param {(() => void) | null} handler */
+export function setUnauthorizedHandler(handler) {
   onUnauthorized = handler;
 }
 
-interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
-  body?: unknown;
-  query?: Record<string, string | number | undefined>;
-  auth?: boolean;
-}
+/**
+ * @typedef {Record<string, string | number | undefined>} Query
+ */
 
-function buildUrl(path: string, query?: RequestOptions['query']): string {
+/**
+ * @typedef {object} RequestOptions
+ * @property {'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'} [method]
+ * @property {unknown} [body]
+ * @property {Query} [query]
+ * @property {boolean} [auth]
+ */
+
+/**
+ * @param {string} path
+ * @param {Query} [query]
+ */
+function buildUrl(path, query) {
   const url = `${config.apiBaseUrl}${path.startsWith('/') ? path : `/${path}`}`;
   if (!query) return url;
   const qs = Object.entries(query)
@@ -29,9 +44,16 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
   return qs ? `${url}?${qs}` : url;
 }
 
-export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+/**
+ * @template T
+ * @param {string} path
+ * @param {RequestOptions} [opts]
+ * @returns {Promise<T>}
+ */
+export async function request(path, opts = {}) {
   const { method = 'GET', body, query, auth = true } = opts;
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  /** @type {Record<string, string>} */
+  const headers = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const sentToken = auth ? authToken : null;
   if (sentToken) headers.Authorization = `Bearer ${sentToken}`;
@@ -39,7 +61,8 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
 
-  let res: Response;
+  /** @type {Response} */
+  let res;
   try {
     res = await fetch(buildUrl(path, query), {
       method,
@@ -48,28 +71,34 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
       signal: controller.signal,
     });
   } catch (e) {
-    const aborted = (e as { name?: string })?.name === 'AbortError';
+    const aborted = /** @type {{ name?: string } | null} */ (e)?.name === 'AbortError';
     throw new AppError(aborted ? 'TIMEOUT' : 'OFFLINE');
   } finally {
     clearTimeout(timer);
   }
 
-  if (res.status === 204) return undefined as T;
+  if (res.status === 204) return /** @type {T} */ (undefined);
 
-  let json: unknown = null;
+  /** @type {unknown} */
+  let json = null;
   try {
     json = await res.json();
   } catch {
     json = null;
   }
 
-  if (res.ok) return json as T;
+  if (res.ok) return /** @type {T} */ (json);
   if (res.status === 401 && sentToken && sentToken === authToken) onUnauthorized?.();
   throw mapError(res.status, json);
 }
 
-function mapError(status: number, json: unknown): AppError {
-  const details = json as { code?: string; data?: Record<string, { message?: string }> } | null;
+/**
+ * @param {number} status
+ * @param {unknown} json
+ * @returns {AppError}
+ */
+function mapError(status, json) {
+  const details = /** @type {{ code?: string, data?: Record<string, { message?: string }> } | null} */ (json);
   const data = details?.data;
   if (details?.code === 'CONTRACT_PENDING') return new AppError('CONTRACT_PENDING', undefined, { status });
   if (details?.code === 'OFF_RATE_LIMITED') return new AppError('RATE_LIMITED', undefined, { status });

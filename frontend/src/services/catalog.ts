@@ -4,7 +4,7 @@
  */
 import { config } from '../shared/api/config';
 import { AppError } from '../shared/api/errors';
-import { request } from '../shared/api/http';
+import { request } from '../shared/api/ApiService';
 import { emptyFacts } from '../shared/domain/nutrients';
 import type { ManualProductInput, NutrientKey, Product, ProductSummary } from '../shared/domain/types';
 import { DEMO_BARCODE_NOT_FOUND, demoProducts } from './fixtures';

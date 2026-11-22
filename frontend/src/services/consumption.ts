@@ -3,7 +3,7 @@
  * Catatan konsumsi sendiri dikelola offline-first (OfflineDataProvider + sync).
  */
 import { config } from '../shared/api/config';
-import { request } from '../shared/api/http';
+import { request } from '../shared/api/ApiService';
 import type { DailySummary, SummaryMetric, SummaryTarget } from '../shared/domain/types';
 import { demoPlanRules } from './fixtures';
 import { delay } from './network';

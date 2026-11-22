@@ -1,7 +1,7 @@
 /** Identity & Access diakses lewat gateway AmbatuNourish. */
 import { config } from '../shared/api/config';
 import { AppError } from '../shared/api/errors';
-import { request } from '../shared/api/http';
+import { request } from '../shared/api/ApiService';
 import type { Session, UserProfile } from '../shared/domain/types';
 import { delay, ensureOnline } from './network';
 

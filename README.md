@@ -42,7 +42,7 @@ Pindai QR Metro dengan Expo Go di Android atau aplikasi Kamera di iPhone. Kalau 
 
 Gunakan `npm start` jika Terminal sudah berada di dalam folder `frontend`. Opsi `--prefix frontend` dipakai saat Terminal berada di folder utama `AmbatuNourish`.
 
-Pilih **Daftar** untuk membuat akun uji di backend lokal, lalu gunakan akun itu untuk **Masuk**. Mode development menyimpan akun pada volume terpisah dan memberi sesi 24 jam. Untuk mencoba aplikasi dengan data contoh di perangkat, setel `EXPO_PUBLIC_USE_MOCK=true`.
+Pilih **Daftar** untuk membuat akun uji di backend lokal, lalu gunakan akun itu untuk **Masuk**. Mode development menyimpan akun pada volume terpisah dan memberi sesi 24 jam. Untuk langsung masuk dengan data contoh di Expo Go, ikuti [petunjuk akun demo](frontend/README.md#akun-demo).
 
 Gunakan [backend/api.http](backend/api.http) untuk mencoba katalog dengan barcode `3017620422003`, entri pribadi, dan penilaian.
 
@@ -59,9 +59,11 @@ Nginx menyediakan satu gateway. Empat konteks AmbatuNourish dipisahkan melalui m
 
 ### Publikasikan API dari STB
 
-HTTPS publik memakai `stb.stei.fun`. Gateway API mendengarkan HTTP pada port `80` di jaringan Docker. aaPanel dikelola melalui port `1122` pada jaringan admin. Port host `8081` dipakai untuk pemeriksaan gateway dari STB dan terikat ke `127.0.0.1` secara default.
+HTTPS publik memakai `stb.stei.fun`. Cloudflare Tunnel berjalan di host STB dan mengarah ke gateway Docker di port `80` pada loopback. aaPanel memakai port `1122`. Untuk pengembangan lokal, gateway memakai `127.0.0.1:8081` secara default.
 
-Di sesi SSH STB, cek ruang disk dan port sebelum menjalankan Compose. Jika `8081` sudah dipakai, setel `NOURISH_GATEWAY_PORT` ke port host lain yang kosong di `.env`. Publikasi Tunnel tetap memakai port `80` milik kontainer.
+Compose membatasi `core` pada 256 MiB dan 0,5 CPU, `gateway` pada 64 MiB dan 0,25 CPU, serta `tunnel` opsional pada 128 MiB dan 0,25 CPU. [Batas kontainer Docker Compose](https://docs.docker.com/reference/compose-file/container-spec/)
+
+Di sesi SSH STB, cek ruang disk dan port sebelum menjalankan Compose. Saat menyiapkan server baru, clone branch `backend`.
 
 ```sh
 df -h /
@@ -73,16 +75,18 @@ cd ambatunourish
 test -f .env || (umask 077; cp .env.example .env)
 ```
 
-Jika repo sudah di-clone di lokasi tersebut, masuk ke foldernya dan jalankan `git pull --ff-only origin backend` untuk mengambil commit yang sudah dipush. Di Cloudflare Zero Trust, buat Tunnel dan tambahkan **Published application** untuk `stb.stei.fun` dengan tipe `HTTP` dan origin `gateway:80`. Isi `TUNNEL_TOKEN` serta `OFF_USER_AGENT` dengan token Tunnel dan kontak tim di `.env` pada STB. Gunakan Compose dasar agar mode autentikasi development tetap mati. Simpan `.env` hanya di server. [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/routing-to-tunnel/dns/)
+Atur `NOURISH_BIND_ADDRESS=[::1]` dan `NOURISH_GATEWAY_PORT=80` di `.env` pada STB. Isi `OFF_USER_AGENT` dengan nama aplikasi dan kontak tim untuk Open Food Facts. Simpan `.env` hanya di server. Jalankan Compose dasar agar autentikasi development tetap terbatas ke lingkungan lokal.
 
 ```sh
-docker compose --profile tunnel up -d --build --wait
-docker compose --profile tunnel ps
-curl -fsS http://127.0.0.1:8081/health
+docker compose up -d --build --wait core gateway
+docker compose ps
+curl -gfsS 'http://[::1]/health'
 curl -fsS https://stb.stei.fun/health
 ```
 
-Jika Tunnel yang sudah ada berjalan **di host STB** dan diarahkan lewat aaPanel, buat Proxy Project untuk `stb.stei.fun` dengan target `http://127.0.0.1:8081` dan pertahankan path. Route Tunnel kemudian menuju HTTP port `80` milik website tersebut. Gunakan salah satu jalur publik per hostname. [aaPanel Proxy Project](https://www.aapanel.com/docs/Function/proxy.html)
+Di Cloudflare, aturan **Published application** untuk API `stb.stei.fun` memakai service `http://localhost:80` dan Path `^/(api(/.*)?|health|docs/?|openapi[.]json)$`. Letakkan aturan API di atas aturan aaPanel. [Routing Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/concepts/routing/)
+
+STB yang aktif sudah memiliki `ambatunourish-deploy.timer`. Timer mengecek branch `backend` setiap dua menit setelah push. Lihat hasilnya lewat `journalctl -u ambatunourish-deploy.service -f`. Untuk host tanpa timer, jalankan `git pull --ff-only origin backend` dari folder repo lalu ulangi perintah Compose.
 
 | Hasil deployment | URL |
 | --- | --- |
