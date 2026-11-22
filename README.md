@@ -94,7 +94,7 @@ STB yang aktif sudah memiliki `ambatunourish-deploy.timer`. Timer mengecek branc
 | Swagger UI | `https://stb.stei.fun/docs` |
 | Spesifikasi OpenAPI | `https://stb.stei.fun/openapi.json` |
 | Health check | `https://stb.stei.fun/health` |
-| Repo dan dokumentasi | [AmbatuNourish, branch backend](https://github.com/bellechillguy/AmbatuNourish/tree/backend) |
+| Repo dan dokumentasi | [AmbatuNourish](https://github.com/bellechillguy/AmbatuNourish/blob/main/backend/API.md) |
 
 Setelah URL publik merespons, gunakan `EXPO_PUBLIC_API_URL=https://stb.stei.fun/api/v1` di `frontend/.env` dan mulai ulang Metro. `/api` lama tetap bisa dipakai klien yang sudah terpasang. Login dan fitur akun publik menunggu kontrak Identity & Access Ambatufit. Pengujian akun lokal memakai override development dan volume sendiri.
 
