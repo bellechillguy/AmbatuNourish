@@ -14,17 +14,23 @@ class Identity(Protocol):
 
 
 class SharedIdentity:
+    def __init__(self, integration=None):
+        self.integration = integration
+
     def register(self, body):
-        # to do: hubungkan registrasi ke Identity & Access Ambatufit setelah kontrak tersedia.
+        # to do: sepakati registrasi yang memetakan nama tampilan dan mengembalikan sesi.
         raise pending()
 
     def login(self, body):
-        # to do: panggil login Ambatufit dan petakan identitas, JWT, serta masa berlaku sesi.
-        raise pending()
+        if not self.integration:
+            raise pending()
+        return self.integration.request('/identity/login', method='POST', identity=True,
+                                        body={key: body.get(key) for key in ('email', 'password')})
 
     def profile(self, token):
-        # to do: verifikasi JWT/sesi sesuai issuer, audience dan kunci Identity & Access Ambatufit.
-        raise pending()
+        if not self.integration:
+            raise pending()
+        return self.integration.request('/identity/me', token=token, identity=True)
 
     def update_profile(self, token, body):
         # to do: kirim perubahan profil ke Identity & Access sesuai field yang disepakati.

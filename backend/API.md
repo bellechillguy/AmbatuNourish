@@ -16,7 +16,7 @@ Kirim `Content-Type: application/json` untuk body JSON. Endpoint personal memaka
 | `POST /auth/logout` | | `204` |
 | `POST /auth/reset-password` | `{email}` | `503 CONTRACT_PENDING` |
 
-`Session = {token: string, user: UserProfile}`. `UserProfile = {id: string, name: string, email: string}`. Register dan login tersedia dalam mode development. Password development membutuhkan minimal delapan karakter. Email dinormalisasi menjadi lowercase dan unik untuk akun uji. Rute yang membutuhkan identitas bersama mengembalikan `503 CONTRACT_PENDING` pada Compose dasar sampai kontrak Ambatufit tersedia.
+`Session = {token: string, user: UserProfile}`. `UserProfile = {id: string, name: string, email: string}`. Login dan pembacaan profil memakai AmbatuFit melalui layanan integrasi jika dikonfigurasi. Nama tampilan sementara diambil dari bagian email sebelum `@` karena `UserDTO` AmbatuFit belum memuat nama tampilan. Logout mengakhiri sesi di perangkat sambil menunggu kontrak pencabutan JWT. Registrasi serta perubahan nama tersedia dalam mode development. Password registrasi development membutuhkan minimal delapan karakter. Email development dinormalisasi menjadi lowercase dan unik untuk akun uji. Fitur mitra yang belum siap mengembalikan `503 CONTRACT_PENDING`.
 
 ## Food Catalog
 
@@ -95,8 +95,19 @@ ID preferensi adalah `sugar` (`SUGAR_MAX_PER_PORTION`, g), `sodium` (`SODIUM_MAX
 - `POST /partner/assessment/product` menerima `{barcode, portion, preferences?: [{id, value?, ingredients?}]}` dan menghasilkan `Assessment`. Pemanggil memberikan aturan penilaiannya sendiri.
 - Pengiriman data ke Ambatufit dan Ambatueat akan mengikuti kontrak kelompok masing-masing. Titik integrasi ditandai `# to do`.
 
+## Makanan Daerah dari AmbatuEat
+
+| Rute | Input | Respons |
+| --- | --- | --- |
+| `GET /regional-foods` | Query opsional `q` untuk nama makanan | Daftar `{id, name, region}` |
+| `GET /regional-foods/{id}` | ID makanan dari daftar | `{id, name, region, story, variants}` |
+
+Kedua rute memakai Bearer token sesi AmbatuNourish. Setiap `variant` berisi `{id, name, portionQuantity, portionUnit, source, nutrition}`. `nutrition` berisi pasangan nama dan nilai gizi dari AmbatuEat atau `null` jika data belum tersedia. Nilai tetap terkait dengan varian porsi dari sumbernya.
+
 ## Error, batas, dan pengulangan
 
 Body error JSON standar berbentuk `{status, code, message, data?: {[field]: {message}}}`. Status yang digunakan mencakup `401` untuk autentikasi yang gagal, `404` untuk sumber daya tidak ditemukan dalam cakupan pemilik, `405` untuk metode salah, `413` di atas 1 MiB, `415` untuk format body yang salah, dan `422` untuk validasi. Semua respons core membawa `X-Request-ID`. Nginx memberi `429` setelah batas lokal auth atau mitra terlampaui.
+
+AmbatuFit dan AmbatuEat dapat mengembalikan `502 PARTNER_UNAVAILABLE` ketika layanan eksternal gagal, `502 PARTNER_INVALID_RESPONSE` untuk payload yang tidak sesuai kontrak, atau `504 PARTNER_TIMEOUT` saat batas waktu terlewati.
 
 Open Food Facts membedakan `404` produk tidak ditemukan, `502 OFF_INVALID_RESPONSE/OFF_UNAVAILABLE`, `503 OFF_RATE_LIMITED`, dan `504 OFF_TIMEOUT`. Bila tersedia, backend mengembalikan katalog cache dengan `isStale: true` saat penyegaran gagal. Timeout provider diatur dengan `OFF_TIMEOUT_SECONDS`, default 4 detik. ACL membatasi 15 lookup dan 10 search per menit untuk satu proses. Klien HTTP Expo memakai timeout 10 detik. Retry idempotent tersedia untuk mutasi sync. [Dokumentasi API Open Food Facts](https://openfoodfacts.github.io/documentation/docs/Product-Opener/api/)

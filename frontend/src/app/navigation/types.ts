@@ -13,6 +13,8 @@ export type HomeStackParamList = {
 export type ProductStackParamList = {
   ProductSearch: undefined;
   SearchResults: { query: string; filter?: 'ALL' | 'OPEN_FOOD_FACTS' | 'USER_ENTERED' };
+  RegionalFoods: undefined;
+  RegionalFoodDetail: { id: string };
   Compare: undefined;
 };
 

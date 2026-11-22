@@ -12,12 +12,13 @@ from urllib.parse import parse_qs
 from .assessment import AssessmentService, preference_input
 from .catalog import Catalog
 from .common import (ApiError, array, choice, date_key, encode, identifier, integer, invalid, missing,
-                     new_id, obj, text)
+                     new_id, obj, pending, text)
 from .consumption import Consumption
 from .db import Database
 from .meals import Meals, items_input
 from .openapi import API_BASE, DISCOVERY, SWAGGER_HTML, build_openapi, public_path
 from .open_food_facts import OpenFoodFacts
+from .partner_http import IntegrationClient
 from .partners import Ambatueat, Ambatufit, SharedIdentity
 from .sync import Sync
 
@@ -43,13 +44,14 @@ class Request:
 
 
 class Application:
-    def __init__(self, db, identity, catalog, nutrition, restaurants, partner_key=None):
+    def __init__(self, db, identity, catalog, nutrition, restaurants, partner_key=None, *, integration=None):
         self.db = db
         self.identity = identity
         self.catalog = catalog
         self.nutrition = nutrition
         self.restaurants = restaurants
         self.partner_key = partner_key
+        self.integration = integration
         self.assessment = AssessmentService(db, catalog, nutrition)
         self.meals = Meals(db, self.assessment)
         self.consumption = Consumption(db, self.meals, catalog, nutrition)
@@ -66,6 +68,8 @@ class Application:
             ('GET', f'/products/barcode/{ID}', 'user', lambda req, id: catalog.lookup_for_user(req.owner, id)),
             ('GET', f'/products/{ID}', 'user', lambda req, id: catalog.detail(req.owner, id)),
             ('POST', f'/products/{ID}/refresh', 'user', lambda req, id: catalog.detail(req.owner, id, refresh=True)),
+            ('GET', '/regional-foods', 'user', self.regional_foods),
+            ('GET', f'/regional-foods/{ID}', 'user', self.regional_food),
             ('GET', '/manual-products', 'user', lambda req: catalog.search(req.owner, '', 'USER_ENTERED', req.page())),
             ('POST', '/manual-products', 'user', lambda req: (201, catalog.save_manual(req.owner, req.body))),
             ('PUT', f'/manual-products/{ID}', 'user', lambda req, id: catalog.save_manual(req.owner, req.body, id)),
@@ -121,6 +125,17 @@ class Application:
         query = text(req.query.get('q', '').strip(), 'q', maximum=120, optional=True) or ''
         source = choice(req.query.get('source', 'ALL'), 'source', ('ALL', 'USER_ENTERED', 'OPEN_FOOD_FACTS'))
         return self.catalog.search(req.owner, query, source, req.page(), discover=req.query.get('discover') == '1')
+
+    def regional_foods(self, req):
+        if not self.integration:
+            raise pending()
+        query = text(req.query.get('q', '').strip(), 'q', maximum=120, optional=True)
+        return self.integration.request('/regional-foods', query={'q': query} if query else None)
+
+    def regional_food(self, req, id):
+        if not self.integration:
+            raise pending()
+        return self.integration.request('/regional-foods/' + id, detail=True)
 
     def assess_meal(self, req):
         items = items_input(req.body.get('items'))
@@ -268,7 +283,12 @@ class Application:
 def create_app():
     folder = Path(os.getenv('NOURISH_DATA_DIR', './data'))
     db = Database(folder / 'nourish.sqlite3')
-    identity = SharedIdentity()
+    integration_url = os.getenv('NOURISH_INTEGRATION_BASE_URL')
+    integration_key = os.getenv('NOURISH_INTEGRATION_API_KEY')
+    if bool(integration_url) != bool(integration_key):
+        raise ValueError('Isi NOURISH_INTEGRATION_BASE_URL dan NOURISH_INTEGRATION_API_KEY bersamaan.')
+    integration = IntegrationClient(integration_url, integration_key) if integration_url else None
+    identity = SharedIdentity(integration)
     if os.getenv('NOURISH_DEV_AUTH') == '1':
         from .dev_identity import DevIdentity
         identity = DevIdentity(folder / 'dev-identity.sqlite3')
@@ -277,4 +297,5 @@ def create_app():
                              float(os.getenv('OFF_TIMEOUT_SECONDS', '4')))
     ttl = os.getenv('OFF_CACHE_TTL_SECONDS')
     catalog = Catalog(db, provider, int(ttl) if ttl else None)
-    return Application(db, identity, catalog, Ambatufit(), Ambatueat(), os.getenv('NOURISH_PARTNER_API_KEY'))
+    return Application(db, identity, catalog, Ambatufit(), Ambatueat(), os.getenv('NOURISH_PARTNER_API_KEY'),
+                       integration=integration)

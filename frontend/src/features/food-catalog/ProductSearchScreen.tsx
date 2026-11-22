@@ -5,7 +5,8 @@ import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import type { ProductStackParamList } from '../../app/navigation/types';
 import { useRootNav } from '../../app/navigation/types';
-import { ActionLink, AppText, Banner, Button, Screen, SectionHeader, Skeleton } from '../../shared/components';
+import { config } from '../../shared/api/config';
+import { ActionLink, AppText, Banner, Button, ListRow, Screen, SectionHeader, Skeleton } from '../../shared/components';
 import { useCatalogLocal } from '../../shared/state/CatalogLocalProvider';
 import { useAsync } from '../../shared/state/useAsync';
 import { spacing } from '../../shared/theme';
@@ -64,6 +65,10 @@ export function ProductSearchScreen() {
           />
         </View>
       </View>
+
+      {!config.useMock ? (
+        <ListRow title="Makanan Daerah" subtitle="Katalog dari AmbatuEat" onPress={() => nav.navigate('RegionalFoods')} />
+      ) : null}
 
       {recentOff.length ? (
         <View style={styles.group}>

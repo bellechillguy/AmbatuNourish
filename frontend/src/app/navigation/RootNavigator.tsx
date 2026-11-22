@@ -24,6 +24,7 @@ import {
 import { ProductSearchScreen } from '../../features/food-catalog/ProductSearchScreen';
 import { SearchResultsScreen } from '../../features/food-catalog/SearchResultsScreen';
 import { ProductDetailScreen } from '../../features/food-catalog/ProductDetailScreen';
+import { RegionalFoodDetailScreen, RegionalFoodsScreen } from '../../features/food-catalog/RegionalFoodScreens';
 import { ManualProductFormScreen, ManualProductReviewScreen } from '../../features/food-catalog/ManualProductScreens';
 import { AssessmentResultScreen } from '../../features/nutritional-assessment/AssessmentResultScreen';
 import { CompareScreen } from '../../features/nutritional-assessment/CompareScreen';
@@ -96,6 +97,8 @@ function ProductTab() {
     <ProductStack.Navigator screenOptions={options}>
       <ProductStack.Screen name="ProductSearch" component={ProductSearchScreen} />
       <ProductStack.Screen name="SearchResults" component={SearchResultsScreen} />
+      <ProductStack.Screen name="RegionalFoods" component={RegionalFoodsScreen} />
+      <ProductStack.Screen name="RegionalFoodDetail" component={RegionalFoodDetailScreen} />
       <ProductStack.Screen name="Compare" component={CompareScreen} />
     </ProductStack.Navigator>
   );
