@@ -17,7 +17,7 @@ npm --prefix frontend install
 Untuk Expo Go di HP, sambungkan HP dan komputer ke jaringan Wi-Fi yang sama. Isi `frontend/.env` dengan IP Wi-Fi komputer. Ganti `IP-LAN-KOMPUTER` dengan IP tersebut, misalnya `192.168.1.2`.
 
 ```dotenv
-EXPO_PUBLIC_API_URL=http://IP-LAN-KOMPUTER:8081/api
+EXPO_PUBLIC_API_URL=http://IP-LAN-KOMPUTER:8081/api/v1
 EXPO_PUBLIC_USE_MOCK=false
 ```
 
@@ -57,13 +57,42 @@ NOURISH_DEV_AUTH=1 python3 -m nourish
 
 Nginx menyediakan satu gateway. Empat konteks AmbatuNourish dipisahkan melalui modul dan tabel milik masing-masing konteks. Docker menjalankan keempatnya dalam satu proses backend melalui Gunicorn agar deployment STB sederhana dan pencatatan operasi sinkronisasi tetap atomik. Food Catalog memisahkan tabel produk Open Food Facts dari produk pribadi. SQLite dipilih karena stack sebelumnya memakai PocketBase dengan SQLite dan kebutuhan transaksi/indeks tetap dapat ditangani pada satu host. Skema AmbatuNourish dimulai pada volume baru karena model katalog dan kepemilikan datanya berbeda.
 
-Untuk STB/VM gunakan Compose dasar. Setel `OFF_USER_AGENT` dengan alamat kontak tim. Profile `tunnel` memakai `TUNNEL_TOKEN` dari Cloudflare dan route HTTPS ke `http://gateway:80`. Aplikasi mengarah ke URL HTTPS dengan akhiran `/api`. Port host terbatas ke loopback secara default. Jaringan Compose menampung trafik internal gateway ke core. Untuk autentikasi produksi, hubungkan Identity & Access Ambatufit sebelum membuka alur akun. Adapter Ambatufit dan Ambatueat menunggu kontrak agar dapat dideploy sebagai integrasi di luar STB. Pengujian lokal memakai override development dan volume sendiri. [Dokumentasi Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/reference/run-parameters/#token)
+### Publikasikan API dari STB
+
+HTTPS publik memakai `stb.stei.fun`. Gateway API mendengarkan HTTP pada port `80` di jaringan Docker. aaPanel dikelola melalui port `1122` pada jaringan admin. Port host `8081` dipakai untuk pemeriksaan gateway dari STB dan terikat ke `127.0.0.1` secara default.
+
+Di sesi SSH STB, cek ruang disk dan port sebelum menjalankan Compose. Jika `8081` sudah dipakai, setel `NOURISH_GATEWAY_PORT` ke port host lain yang kosong di `.env`. Publikasi Tunnel tetap memakai port `80` milik kontainer.
 
 ```sh
-docker compose up -d --build --wait
-docker compose --profile tunnel up -d
-docker compose logs core gateway
+df -h /
+ss -ltnp '( sport = :80 or sport = :8081 or sport = :1122 )'
+mkdir -p /www/apps
+cd /www/apps
+git clone --branch backend --single-branch https://github.com/bellechillguy/AmbatuNourish.git ambatunourish
+cd ambatunourish
+test -f .env || (umask 077; cp .env.example .env)
 ```
+
+Jika repo sudah di-clone di lokasi tersebut, masuk ke foldernya dan jalankan `git pull --ff-only origin backend` untuk mengambil commit yang sudah dipush. Di Cloudflare Zero Trust, buat Tunnel dan tambahkan **Published application** untuk `stb.stei.fun` dengan tipe `HTTP` dan origin `gateway:80`. Isi `TUNNEL_TOKEN` serta `OFF_USER_AGENT` dengan token Tunnel dan kontak tim di `.env` pada STB. Gunakan Compose dasar agar mode autentikasi development tetap mati. Simpan `.env` hanya di server. [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/routing-to-tunnel/dns/)
+
+```sh
+docker compose --profile tunnel up -d --build --wait
+docker compose --profile tunnel ps
+curl -fsS http://127.0.0.1:8081/health
+curl -fsS https://stb.stei.fun/health
+```
+
+Jika Tunnel yang sudah ada berjalan **di host STB** dan diarahkan lewat aaPanel, buat Proxy Project untuk `stb.stei.fun` dengan target `http://127.0.0.1:8081` dan pertahankan path. Route Tunnel kemudian menuju HTTP port `80` milik website tersebut. Gunakan salah satu jalur publik per hostname. [aaPanel Proxy Project](https://www.aapanel.com/docs/Function/proxy.html)
+
+| Hasil deployment | URL |
+| --- | --- |
+| Base URL | `https://stb.stei.fun/api/v1` |
+| Swagger UI | `https://stb.stei.fun/docs` |
+| Spesifikasi OpenAPI | `https://stb.stei.fun/openapi.json` |
+| Health check | `https://stb.stei.fun/health` |
+| Repo dan dokumentasi | [AmbatuNourish, branch backend](https://github.com/bellechillguy/AmbatuNourish/tree/backend) |
+
+Setelah URL publik merespons, gunakan `EXPO_PUBLIC_API_URL=https://stb.stei.fun/api/v1` di `frontend/.env` dan mulai ulang Metro. `/api` lama tetap bisa dipakai klien yang sudah terpasang. Login dan fitur akun publik menunggu kontrak Identity & Access Ambatufit. Pengujian akun lokal memakai override development dan volume sendiri.
 
 Migration SQL pada `backend/nourish/migrations` berjalan berurutan dan atomik saat startup. Sebelum upgrade, buat cadangan dengan SQLite online backup. Uji pemulihan pada volume staging. Untuk rollback skema, hentikan backend, pulihkan cadangan lengkap sebelum upgrade ke volume terpisah, lalu gunakan image versi yang sesuai.
 
@@ -79,7 +108,7 @@ Katalog menyimpan atribusi dan provenance Open Food Facts. Isi `OFF_CACHE_TTL_SE
 - Penilaian memakai batas yang dimasukkan pengguna dan bahan yang dipilih pengguna. Rumus klinis, skor, dan ambang bawaan menunggu kesepakatan domain.
 - Default sementara mengikuti UI yang sudah ada berupa produk manual privat, empat slot makan, maksimal tiga produk pembanding, enam metrik harian, dan penyelesaian konflik berdasarkan pilihan pengguna.
 - Komentar `# to do` menandai Identity & Access dan reset, Nutrition Plan, pengiriman Consumption History, trigger booking, pencarian restoran, dan pertukaran informasi gizi menu. Saat kontrak tersedia, lengkapi adapter, skema/versi mitra, dan pengujian kontraknya. Tentukan kebijakan retensi, penghapusan, akses, dan pengelolaan data bersama sebelum rilis produksi.
-- API mitra milik AmbatuNourish di `/api/partner/v1` dapat diaktifkan dengan `NOURISH_PARTNER_API_KEY` di server. Endpoint hanya membaca katalog Open Food Facts dan aturan yang dikirim pemanggil untuk permintaannya sendiri.
+- API mitra milik AmbatuNourish di `/api/v1/partner` dapat diaktifkan dengan `NOURISH_PARTNER_API_KEY` di server. Endpoint hanya membaca katalog Open Food Facts dan aturan yang dikirim pemanggil untuk permintaannya sendiri.
 
 ## Verifikasi
 

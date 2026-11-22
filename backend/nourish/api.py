@@ -16,6 +16,7 @@ from .common import (ApiError, array, choice, date_key, encode, identifier, inte
 from .consumption import Consumption
 from .db import Database
 from .meals import Meals, items_input
+from .openapi import API_BASE, DISCOVERY, SWAGGER_HTML, build_openapi, public_path
 from .open_food_facts import OpenFoodFacts
 from .partners import Ambatueat, Ambatufit, SharedIdentity
 from .sync import Sync
@@ -93,7 +94,18 @@ class Application:
             ('GET', f'/partner/v1/products/barcode/{ID}', 'partner', lambda req, id: catalog.lookup(id)),
             ('POST', '/partner/v1/assessment/product', 'partner', self.partner_assessment),
         ]
-        self.routes = [(method, re.compile('/api' + path), auth, handler) for method, path, auth, handler in self.routes]
+        self.openapi = build_openapi(self.routes, ID)
+        self.routes = [
+            (method, re.compile(route), auth, handler)
+            for method, path, auth, handler in self.routes
+            for route in ('/api' + path, API_BASE + public_path(path))
+        ]
+        self.routes.extend([
+            ('GET', re.compile('/health'), 'none', self.health),
+            ('GET', re.compile(API_BASE + '/?'), 'none', lambda req: DISCOVERY),
+            ('GET', re.compile('/docs/?'), 'none', lambda req: SWAGGER_HTML),
+            ('GET', re.compile(r'/openapi\.json'), 'none', lambda req: self.openapi),
+        ])
 
     @staticmethod
     def no_content(handler, *args):
@@ -236,12 +248,16 @@ class Application:
                  'durationMs': round((monotonic() - start) * 1000)}
         if error_code:
             entry['code'] = error_code
-        if status == 200 and route_name == '/api/sync' and isinstance(data, list):
+        if status == 200 and route_name in ('/api/sync', API_BASE + '/sync') and isinstance(data, list):
             entry['results'] = {key: sum(item['status'] == key for item in data)
                                 for key in ('ACCEPTED', 'REJECTED', 'CONFLICT', 'RETRYABLE')}
         LOG.info(encode(entry))
-        response = b'' if status == 204 else encode(data).encode()
-        headers = [('Content-Type', 'application/json; charset=utf-8'), ('Content-Length', str(len(response))),
+        if isinstance(data, bytes):
+            response, content_type = data, 'text/html; charset=utf-8'
+        else:
+            response = b'' if status == 204 else encode(data).encode()
+            content_type = 'application/json; charset=utf-8'
+        headers = [('Content-Type', content_type), ('Content-Length', str(len(response))),
                    ('X-Request-ID', request_id), ('Cache-Control', 'no-store')]
         if status == 405:
             headers.append(('Allow', ', '.join(allowed)))

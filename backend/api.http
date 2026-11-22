@@ -1,4 +1,8 @@
-@baseUrl = http://localhost:8081/api
+@baseUrl = http://localhost:8081/api/v1
+# STB setelah dipublikasikan: https://stb.stei.fun/api/v1
+
+### Informasi API
+GET {{baseUrl}}
 
 ### Readiness
 GET {{baseUrl}}/health

@@ -1,6 +1,6 @@
 # Kontrak API AmbatuNourish v1
 
-Mobile memakai `http://localhost:8081/api` lewat Nginx pada lingkungan lokal. Pada STB/VM, pakai `https://<hostname-gateway>/api`. Jalur server-to-server memiliki versi eksplisit `/api/partner/v1`.
+Semua rute di bawah relatif terhadap base URL `http://localhost:8081/api/v1` di lingkungan lokal atau `https://stb.stei.fun/api/v1` setelah STB dipublikasikan. Health publik tersedia di `/health`, Swagger UI di `/docs`, dan spesifikasi OpenAPI di `/openapi.json` pada origin yang sama. Alias `/api` dan jalur mitra `/api/partner/v1` tetap tersedia untuk klien lama.
 
 Kirim `Content-Type: application/json` untuk body JSON. Endpoint personal memakai `Authorization: Bearer <token>`. Identitas pemilik selalu berasal dari sesi. Endpoint lintas kelompok memakai `X-API-Key` yang dikirim server mitra melalui HTTPS. API key hanya mengizinkan dua rute publik dan bersifat opsional sampai distribusi kunci disepakati.
 
@@ -91,8 +91,8 @@ ID preferensi adalah `sugar` (`SUGAR_MAX_PER_PORTION`, g), `sodium` (`SODIUM_MAX
 
 ## Rute server-to-server
 
-- `GET /partner/v1/products/barcode/{barcode}` menghasilkan `Product` dari katalog bersama.
-- `POST /partner/v1/assessment/product` menerima `{barcode, portion, preferences?: [{id, value?, ingredients?}]}` dan menghasilkan `Assessment`. Pemanggil memberikan aturan penilaiannya sendiri.
+- `GET /partner/products/barcode/{barcode}` menghasilkan `Product` dari katalog bersama.
+- `POST /partner/assessment/product` menerima `{barcode, portion, preferences?: [{id, value?, ingredients?}]}` dan menghasilkan `Assessment`. Pemanggil memberikan aturan penilaiannya sendiri.
 - Pengiriman data ke Ambatufit dan Ambatueat akan mengikuti kontrak kelompok masing-masing. Titik integrasi ditandai `# to do`.
 
 ## Error, batas, dan pengulangan
