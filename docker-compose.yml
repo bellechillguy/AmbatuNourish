@@ -1,39 +1,41 @@
-volumes:
-  product_data:   # database & file milik product-service
-  account_data:   # database & file milik account-service
-
 services:
-  product-service:          # PocketBase #1: koleksi products
-    build: ./pocketbase
+  core:
+    build: ./backend
     restart: unless-stopped
+    environment:
+      NOURISH_DEV_AUTH: "0"
+      NOURISH_PARTNER_API_KEY: ${NOURISH_PARTNER_API_KEY:-}
+      OFF_USER_AGENT: ${OFF_USER_AGENT:-AmbatuNourish/0.1 (development)}
+      OFF_CACHE_TTL_SECONDS: ${OFF_CACHE_TTL_SECONDS:-}
+      OFF_TIMEOUT_SECONDS: ${OFF_TIMEOUT_SECONDS:-4}
     volumes:
-      - product_data:/pb_data
-    ports:
-      - "8091:8090"         # dashboard: http://IP_SERVER:8091/_/
+      - nourish_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=2).close()"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
 
-  account-service:          # PocketBase #2: users + favorites
-    build: ./pocketbase
-    restart: unless-stopped
-    volumes:
-      - account_data:/pb_data
-    ports:
-      - "8092:8090"         # dashboard: http://IP_SERVER:8092/_/
-
-  gateway:                  # satu pintu masuk API
+  gateway:
     image: nginx:1.28-alpine
     restart: unless-stopped
     ports:
-      - "8081:80"
+      - "${NOURISH_BIND_ADDRESS:-127.0.0.1}:${NOURISH_GATEWAY_PORT:-8081}:80"
     volumes:
-      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./backend/gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      - product-service
-      - account-service
+      core:
+        condition: service_healthy
 
-  tunnel:                   # opsional: Cloudflare Tunnel
+  tunnel:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
     depends_on:
       - gateway
     profiles: ["tunnel"]
+
+volumes:
+  nourish_data:

@@ -1,0 +1,9 @@
+services:
+  core:
+    environment:
+      NOURISH_DEV_AUTH: "1"
+    volumes:
+      - nourish_dev_data:/data
+
+volumes:
+  nourish_dev_data:

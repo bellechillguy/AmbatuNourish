@@ -1,0 +1,17 @@
+.expo/
+dist/
+web-build/
+ios/
+android/
+coverage/
+
+/credentials.json
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision
+*.provisionprofile
+*.apk
+*.aab
+*.ipa

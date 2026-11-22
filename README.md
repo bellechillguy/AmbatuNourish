@@ -1,102 +1,91 @@
-# KatalogKu API — Microservice dengan PocketBase
+# AmbatuNourish
 
-Backend aplikasi KatalogKu (praktikum PAWM / II3140) yang disusun sebagai **microservice**
-tanpa menulis kode server. Semua tool gratis & open source:
+Aplikasi Expo untuk katalog pangan, preferensi dan penilaian gizi, perencanaan makan, serta riwayat konsumsi. Backend ada di `backend/nourish`, dengan API JSON melalui Nginx dan SQLite untuk peralatan pengembangan serta deployment STB/VM. Kontrak mobile dan server-to-server ada di [backend/API.md](backend/API.md).
 
-| Komponen | Tool | Lisensi |
-|---|---|---|
-| product-service, account-service | [PocketBase](https://pocketbase.io) v0.40.5 | MIT |
-| API gateway | Nginx 1.28 | BSD-2 |
-| Orkestrasi | Docker Compose | Apache-2.0 |
-| Uji API | REST Client (VS Code) / Postman / Bruno | MIT / gratis |
-| Akses publik (opsional) | Cloudflare Tunnel (`cloudflared`) | Apache-2.0 |
+## Jalankan backend dan frontend
 
-## Arsitektur
+Siapkan Docker dengan Docker Compose, Node.js 24 LTS (24.3 atau lebih baru), dan npm. Untuk tes di HP, gunakan Expo Go yang kompatibel dengan **Expo SDK 58**. Jalankan kedua tab Terminal dari folder utama `AmbatuNourish`.
 
-```
-Aplikasi / Postman
-       │  http://IP_SERVER:8081/api/...
-       ▼
-┌─────────────┐   /api/products    ┌──────────────────┐
-│  gateway    │ ─────────────────► │ product-service  │ → SQLite
-│  (Nginx)    │   /api/auth/...    ├──────────────────┤
-│  :8081      │ ─────────────────► │ account-service  │ → SQLite
-└─────────────┘   /api/favorites   └──────────────────┘
+### Persiapan pertama kali
+
+```sh
+test -f .env || cp .env.example .env
+test -f frontend/.env || cp frontend/.env.example frontend/.env
+npm --prefix frontend install
 ```
 
-Setiap service punya database sendiri (database-per-service). Favorit hanya menyimpan
-`product_id`; detail produk diambil aplikasi dari product-service.
+Untuk Expo Go di HP, sambungkan HP dan komputer ke jaringan Wi-Fi yang sama. Isi `frontend/.env` dengan IP Wi-Fi komputer. Ganti `IP-LAN-KOMPUTER` dengan IP tersebut, misalnya `192.168.1.2`.
 
-## Struktur folder
-
-```
-katalogku-pocketbase/
-├── docker-compose.yml        # 3 service + tunnel (opsional)
-├── .env.example              # TUNNEL_TOKEN (opsional)
-├── pocketbase/Dockerfile     # image PocketBase (amd64 & arm64/STB)
-├── gateway/nginx.conf        # pemetaan URL /api/... → service
-├── pb_schema/                # skema koleksi siap import
-│   ├── product_collections.json
-│   └── account_collections.json
-├── seed.http                 # isi 5 produk contoh
-├── api.http                  # uji semua endpoint (REST Client)
-└── postman/                  # koleksi + environment Postman
+```dotenv
+EXPO_PUBLIC_API_URL=http://IP-LAN-KOMPUTER:8081/api
+EXPO_PUBLIC_USE_MOCK=false
 ```
 
-## Menjalankan
+Untuk simulator iOS atau emulator Android, biarkan `EXPO_PUBLIC_API_URL` kosong agar aplikasi memilih alamat lokal platform.
 
-```bash
-# 1. Jalankan semua service (pertama kali butuh internet untuk build image)
-docker compose up -d --build
-docker compose ps
+### Tab 1 — Backend di port 8081
 
-# 2. Buat superuser (admin dashboard) di kedua service
-docker compose exec product-service \
-  pocketbase superuser upsert admin@katalogku.id PASSWORD_KAMU --dir=/pb_data
-docker compose exec account-service \
-  pocketbase superuser upsert admin@katalogku.id PASSWORD_KAMU --dir=/pb_data
+```sh
+NOURISH_BIND_ADDRESS=0.0.0.0 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
+curl -fsS http://127.0.0.1:8081/api/health
 ```
 
-3. **Import skema** — buka dashboard, lalu *Settings → Import collections → Load from JSON file*:
-   - `http://IP_SERVER:8091/_/` → `pb_schema/product_collections.json`
-   - `http://IP_SERVER:8092/_/` → `pb_schema/account_collections.json`
-4. **Isi data contoh** — buka `seed.http` di VS Code (ekstensi REST Client), sesuaikan `@pbUrl` dan `@suPassword`, lalu klik **Send Request** satu per satu.
-5. **Uji API lewat gateway** — buka `api.http`, ganti `@baseUrl`, jalankan berurutan
-   (register → login → favorit). Alternatif: import folder `postman/` ke Postman dan pilih
-   environment *Lokal*, *ServerLAN*, atau *Cloudflare*.
+Compose menjalankan backend dengan autentikasi development dan menyiapkan lingkungan Python. Tambahkan `--build` setelah `up -d` saat perlu membangun ulang image setelah mengubah kode backend.
 
-Cek cepat: `curl http://localhost:8081/api/health` dan `curl http://localhost:8081/api/products`.
+### Tab 2 — Frontend di port 8082
 
-## Endpoint (lewat gateway :8081)
-
-| Method | Endpoint | Auth | Keterangan |
-|---|---|---|---|
-| GET | `/api/products?perPage=30` | - | daftar produk `{ items, page, totalItems }` |
-| GET | `/api/products?filter=title~'kopi'` | - | cari produk |
-| GET | `/api/products/:id` | - | detail produk |
-| POST | `/api/auth/records` | - | register `{ name, email, password, passwordConfirm }` |
-| POST | `/api/auth/auth-with-password` | - | login `{ identity, password }` → `{ token, record }` |
-| GET | `/api/favorites` | Bearer | favorit milik user login |
-| POST | `/api/favorites` | Bearer | `{ user, product_id }` |
-| DELETE | `/api/favorites/:recordId` | Bearer | hapus favorit |
-
-Tambah/ubah produk dilakukan admin lewat dashboard atau `seed.http` (API Rule create = superuser saja).
-
-## Akses dari internet (opsional)
-
-- **Quick tunnel** (tanpa akun, URL berubah tiap dijalankan):
-  docker run --rm --network host cloudflare/cloudflared:latest tunnel --no-autoupdate --url http://localhost:8081
-- **Tunnel permanen**: salin token dari dashboard Cloudflare ke `.env` (`TUNNEL_TOKEN=...`),
-  lalu `docker compose --profile tunnel up -d`.
-
-## Operasional
-
-```bash
-git pull && docker compose up -d --build            # update
-docker compose logs -f account-service              # log
-docker compose cp product-service:/pb_data ./backup-product   # backup
-docker compose cp account-service:/pb_data ./backup-account
+```sh
+npm --prefix frontend start
 ```
 
-> **Keamanan:** ganti semua password contoh, jangan commit `.env`, dan jangan membuka port
-> 8091/8092 ke internet — cukup gateway (8081) atau tunnel.
+Pindai QR Metro dengan Expo Go di Android atau aplikasi Kamera di iPhone. Kalau Metro sudah aktif pada port 8082, gunakan QR dari sesi tersebut. Setelah mengubah `frontend/.env`, mulai ulang Metro. Untuk build yang membatasi HTTP, gunakan URL gateway HTTPS.
+
+Gunakan `npm start` jika Terminal sudah berada di dalam folder `frontend`. Opsi `--prefix frontend` dipakai saat Terminal berada di folder utama `AmbatuNourish`.
+
+Pilih **Daftar** untuk membuat akun uji di backend lokal, lalu gunakan akun itu untuk **Masuk**. Mode development menyimpan akun pada volume terpisah dan memberi sesi 24 jam. Untuk mencoba aplikasi dengan data contoh di perangkat, setel `EXPO_PUBLIC_USE_MOCK=true`.
+
+Gunakan [backend/api.http](backend/api.http) untuk mencoba katalog dengan barcode `3017620422003`, entri pribadi, dan penilaian.
+
+Backend juga bisa dijalankan langsung memakai Python 3.12 dengan OpenSSL dan data zona waktu sistem.
+
+```sh
+cd backend
+NOURISH_DEV_AUTH=1 python3 -m nourish
+```
+
+## Struktur deployment
+
+Nginx menyediakan satu gateway. Empat konteks AmbatuNourish dipisahkan melalui modul dan tabel milik masing-masing konteks. Docker menjalankan keempatnya dalam satu proses backend melalui Gunicorn agar deployment STB sederhana dan pencatatan operasi sinkronisasi tetap atomik. Food Catalog memisahkan tabel produk Open Food Facts dari produk pribadi. SQLite dipilih karena stack sebelumnya memakai PocketBase dengan SQLite dan kebutuhan transaksi/indeks tetap dapat ditangani pada satu host. Skema AmbatuNourish dimulai pada volume baru karena model katalog dan kepemilikan datanya berbeda.
+
+Untuk STB/VM gunakan Compose dasar. Setel `OFF_USER_AGENT` dengan alamat kontak tim. Profile `tunnel` memakai `TUNNEL_TOKEN` dari Cloudflare dan route HTTPS ke `http://gateway:80`. Aplikasi mengarah ke URL HTTPS dengan akhiran `/api`. Port host terbatas ke loopback secara default. Jaringan Compose menampung trafik internal gateway ke core. Untuk autentikasi produksi, hubungkan Identity & Access Ambatufit sebelum membuka alur akun. Adapter Ambatufit dan Ambatueat menunggu kontrak agar dapat dideploy sebagai integrasi di luar STB. Pengujian lokal memakai override development dan volume sendiri. [Dokumentasi Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/reference/run-parameters/#token)
+
+```sh
+docker compose up -d --build --wait
+docker compose --profile tunnel up -d
+docker compose logs core gateway
+```
+
+Migration SQL pada `backend/nourish/migrations` berjalan berurutan dan atomik saat startup. Sebelum upgrade, buat cadangan dengan SQLite online backup. Uji pemulihan pada volume staging. Untuk rollback skema, hentikan backend, pulihkan cadangan lengkap sebelum upgrade ke volume terpisah, lalu gunakan image versi yang sesuai.
+
+```sh
+docker compose exec core python -c 'import sqlite3; a=sqlite3.connect("/data/nourish.sqlite3"); b=sqlite3.connect("/tmp/nourish-backup.sqlite3"); a.backup(b); b.close(); a.close()'
+docker compose cp core:/tmp/nourish-backup.sqlite3 ./nourish-backup.sqlite3
+```
+
+Katalog menyimpan atribusi dan provenance Open Food Facts. Isi `OFF_CACHE_TTL_SECONDS` jika tim sudah menentukan batas umur cache. Jika kosong, pembacaan cache ditandai mungkin kedaluwarsa, dan katalog dapat disegarkan dengan tombol Perbarui. Tinjau ketentuan ODbL sebelum mendistribusikan dataset resmi. [Ketentuan data Open Food Facts](https://support.openfoodfacts.org/help/en-gb/12-api-data-reuse/94-are-there-conditions-to-use-the-api)
+
+## Baseline dan integrasi mitra
+
+- Penilaian memakai batas yang dimasukkan pengguna dan bahan yang dipilih pengguna. Rumus klinis, skor, dan ambang bawaan menunggu kesepakatan domain.
+- Default sementara mengikuti UI yang sudah ada berupa produk manual privat, empat slot makan, maksimal tiga produk pembanding, enam metrik harian, dan penyelesaian konflik berdasarkan pilihan pengguna.
+- Komentar `# to do` menandai Identity & Access dan reset, Nutrition Plan, pengiriman Consumption History, trigger booking, pencarian restoran, dan pertukaran informasi gizi menu. Saat kontrak tersedia, lengkapi adapter, skema/versi mitra, dan pengujian kontraknya. Tentukan kebijakan retensi, penghapusan, akses, dan pengelolaan data bersama sebelum rilis produksi.
+- API mitra milik AmbatuNourish di `/api/partner/v1` dapat diaktifkan dengan `NOURISH_PARTNER_API_KEY` di server. Endpoint hanya membaca katalog Open Food Facts dan aturan yang dikirim pemanggil untuk permintaannya sendiri.
+
+## Verifikasi
+
+```sh
+PYTHONPATH=backend python3 -m unittest discover -s backend/tests -v
+cd frontend
+npm run typecheck
+npm test -- --runInBand
+```

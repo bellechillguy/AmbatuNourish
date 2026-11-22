@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "AmbatuNourish",
+    "slug": "ambatunourish",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#F8F6EF",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "id.ambatunourish.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Kamera hanya dipakai untuk membaca barcode pada kemasan. Gambar tidak disimpan dan tidak dikirim.",
+        "NSLocationWhenInUseUsageDescription": "Lokasi dipakai sekali untuk mencari restoran terdekat lewat Ambatueat, hanya saat Anda membuka fitur ini."
+      }
+    },
+    "android": {
+      "package": "id.ambatunourish.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#F8F6EF"
+      },
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": ["CAMERA", "ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "VIBRATE"]
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFDF7",
+          "image": "./assets/splash-wordmark.png",
+          "imageWidth": 192
+        }
+      ],
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Kamera hanya dipakai untuk membaca barcode pada kemasan. Gambar tidak disimpan dan tidak dikirim.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Lokasi dipakai sekali untuk mencari restoran terdekat lewat Ambatueat, hanya saat Anda membuka fitur ini."
+        }
+      ]
+    ]
+  }
+}
