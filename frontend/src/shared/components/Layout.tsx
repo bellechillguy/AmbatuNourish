@@ -506,12 +506,18 @@ export function RadioRow({
 }
 
 /** Switch 52×32 sesuai N3. */
-export function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
+export function Toggle({ value, onChange, label, disabled = false }: {
+  value: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  disabled?: boolean;
+}) {
   return (
     <Pressable
       onPress={() => onChange(!value)}
+      disabled={disabled}
       accessibilityRole="switch"
-      accessibilityState={{ checked: value }}
+      aria-checked={value}
       accessibilityLabel={label}
       accessibilityValue={{ text: value ? 'aktif' : 'nonaktif' }}
       style={[styles.switch, { backgroundColor: value ? colors.brandGreen : colors.labelQuaternary, justifyContent: value ? 'flex-end' : 'flex-start' }]}

@@ -2,6 +2,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
 
+import { useUiPrefs } from '../../shared/state/PreferencesUiProvider';
 import { useSession } from '../../shared/state/SessionProvider';
 import { colors } from '../../shared/theme';
 import {
@@ -71,20 +72,28 @@ const ProfileStack = createNativeStackNavigator<ProfileStackParamList>();
 const stackOptions = {
   headerShown: false,
   contentStyle: { backgroundColor: colors.neutralWhite },
-  animation: 'slide_from_right' as const,
+  animation: 'default' as const,
 };
 
+const reducedStackOptions = { ...stackOptions, animation: 'none' as const };
+
+function useStackOptions() {
+  return useUiPrefs().reduceMotion ? reducedStackOptions : stackOptions;
+}
+
 function HomeTab() {
+  const options = useStackOptions();
   return (
-    <HomeStack.Navigator screenOptions={stackOptions}>
+    <HomeStack.Navigator screenOptions={options}>
       <HomeStack.Screen name="Home" component={HomeScreen} />
     </HomeStack.Navigator>
   );
 }
 
 function ProductTab() {
+  const options = useStackOptions();
   return (
-    <ProductStack.Navigator screenOptions={stackOptions}>
+    <ProductStack.Navigator screenOptions={options}>
       <ProductStack.Screen name="ProductSearch" component={ProductSearchScreen} />
       <ProductStack.Screen name="SearchResults" component={SearchResultsScreen} />
       <ProductStack.Screen name="Compare" component={CompareScreen} />
@@ -93,24 +102,27 @@ function ProductTab() {
 }
 
 function PlanTab() {
+  const options = useStackOptions();
   return (
-    <PlanStack.Navigator screenOptions={stackOptions}>
+    <PlanStack.Navigator screenOptions={options}>
       <PlanStack.Screen name="PlanHome" component={PlanHomeScreen} />
     </PlanStack.Navigator>
   );
 }
 
 function SummaryTab() {
+  const options = useStackOptions();
   return (
-    <SummaryStack.Navigator screenOptions={stackOptions}>
+    <SummaryStack.Navigator screenOptions={options}>
       <SummaryStack.Screen name="SummaryHome" component={SummaryHomeScreen} />
     </SummaryStack.Navigator>
   );
 }
 
 function ProfileTab() {
+  const options = useStackOptions();
   return (
-    <ProfileStack.Navigator screenOptions={stackOptions}>
+    <ProfileStack.Navigator screenOptions={options}>
       <ProfileStack.Screen name="Profile" component={ProfileScreen} />
       <ProfileStack.Screen name="Preferences" component={PreferencesScreen} />
     </ProfileStack.Navigator>
@@ -118,8 +130,12 @@ function ProfileTab() {
 }
 
 function MainTabs() {
+  const { reduceMotion } = useUiPrefs();
   return (
-    <Tabs.Navigator screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} />}>
+    <Tabs.Navigator
+      screenOptions={{ headerShown: false, animation: reduceMotion ? 'none' : 'fade' }}
+      tabBar={(props) => <TabBar {...props} />}
+    >
       <Tabs.Screen name="HomeTab" component={HomeTab} />
       <Tabs.Screen name="ProductTab" component={ProductTab} />
       <Tabs.Screen name="PlanTab" component={PlanTab} />
@@ -130,12 +146,15 @@ function MainTabs() {
 }
 
 const modal = { presentation: 'fullScreenModal' as const, animation: 'slide_from_bottom' as const };
+const reducedModal = { ...modal, animation: 'none' as const };
+const noTransition = { animation: 'none' as const };
 
 export function RootNavigator() {
   const { session, justRegistered } = useSession();
+  const { reduceMotion } = useUiPrefs();
 
   return (
-    <Root.Navigator screenOptions={stackOptions}>
+    <Root.Navigator screenOptions={reduceMotion ? reducedStackOptions : stackOptions}>
       {!session ? (
         <Root.Group>
           <Root.Screen name="Welcome" component={WelcomeScreen} />
@@ -160,11 +179,11 @@ export function RootNavigator() {
             <Root.Screen name="AccessibilitySettings" component={AccessibilitySettingsScreen} />
             <Root.Screen name="About" component={AboutScreen} />
             <Root.Screen name="SyncStatus" component={SyncStatusScreen} />
-            <Root.Screen name="Lookup" component={LookupScreen} />
+            <Root.Screen name="Lookup" component={LookupScreen} options={noTransition} />
             <Root.Screen name="ProductNotFound" component={ProductNotFoundScreen} />
             <Root.Screen name="ManualProductReview" component={ManualProductReviewScreen} />
           </Root.Group>
-          <Root.Group screenOptions={modal}>
+          <Root.Group screenOptions={reduceMotion ? reducedModal : modal}>
             <Root.Screen name="CameraPermission" component={CameraPermissionScreen} />
             <Root.Screen name="Scanner" component={ScannerScreen} options={{ contentStyle: { backgroundColor: colors.neutralBlack } }} />
             <Root.Screen name="CameraDenied" component={CameraDeniedScreen} />

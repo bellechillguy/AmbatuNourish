@@ -260,9 +260,10 @@ export function AccessibilitySettingsScreen() {
       </View>
       <ToggleRow
         title="Kurangi gerakan"
-        subtitle="Mengikuti perangkat; animasi diganti transisi sederhana"
+        subtitle={prefs.systemReduceMotion ? 'Aktif dari pengaturan perangkat.' : 'Matikan animasi saat berpindah layar.'}
         value={prefs.reduceMotion}
         onChange={(v) => prefs.set('reduceMotion', v)}
+        disabled={prefs.systemReduceMotion}
       />
       <ToggleRow title="Getar saat barcode terbaca" value={prefs.hapticOnScan} onChange={(v) => prefs.set('hapticOnScan', v)} />
       <ToggleRow
@@ -275,7 +276,13 @@ export function AccessibilitySettingsScreen() {
   );
 }
 
-function ToggleRow({ title, subtitle, value, onChange }: { title: string; subtitle?: string; value: boolean; onChange: (v: boolean) => void }) {
+function ToggleRow({ title, subtitle, value, onChange, disabled }: {
+  title: string;
+  subtitle?: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
   return (
     <View style={styles.toggleRow}>
       <View style={styles.flex}>
@@ -286,7 +293,7 @@ function ToggleRow({ title, subtitle, value, onChange }: { title: string; subtit
           </AppText>
         ) : null}
       </View>
-      <Toggle value={value} onChange={onChange} label={title} />
+      <Toggle value={value} onChange={onChange} label={title} disabled={disabled} />
     </View>
   );
 }

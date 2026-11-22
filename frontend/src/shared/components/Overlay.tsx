@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useUiPrefs } from '../state/PreferencesUiProvider';
 import { CONTENT_MAX_WIDTH, colors, radius, spacing } from '../theme';
 import { AppText } from './AppText';
 import { Icon } from './Icon';
@@ -34,8 +35,15 @@ interface BottomSheetProps {
  */
 export function BottomSheet({ visible, title, onClose, children }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
+  const { reduceMotion } = useUiPrefs();
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+    <Modal
+      visible={visible}
+      transparent
+      animationType={reduceMotion ? 'none' : 'slide'}
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Tutup" accessibilityRole="button" />
         <View style={[styles.sheet, { paddingBottom: Math.max(spacing.xl, insets.bottom + spacing.s) }]} accessibilityViewIsModal>
@@ -79,8 +87,15 @@ export function Dialog({
   onDismiss: () => void;
   children: ReactNode;
 }) {
+  const { reduceMotion } = useUiPrefs();
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss} statusBarTranslucent>
+    <Modal
+      visible={visible}
+      transparent
+      animationType={reduceMotion ? 'none' : 'fade'}
+      onRequestClose={onDismiss}
+      statusBarTranslucent
+    >
       <View style={styles.dialogWrap}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} accessibilityLabel="Batal" />
         <View style={styles.dialog} accessibilityViewIsModal>
