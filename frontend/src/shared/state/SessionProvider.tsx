@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { AppError } from '../api/errors';
-import { setAuthToken, setUnauthorizedHandler } from '../api/http';
+import { setAuthToken, setUnauthorizedHandler } from '../api/ApiService';
 import type { Session, UserProfile } from '../domain/types';
 import { identityService, type RegisterInput } from '../../services/identity';
 import { clearUserData, secureSession } from './storage';

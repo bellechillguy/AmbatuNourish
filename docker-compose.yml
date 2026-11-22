@@ -2,6 +2,8 @@ services:
   core:
     build: ./backend
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
     environment:
       NOURISH_DEV_AUTH: "0"
       NOURISH_PARTNER_API_KEY: ${NOURISH_PARTNER_API_KEY:-}
@@ -19,6 +21,8 @@ services:
   gateway:
     image: nginx:1.28-alpine
     restart: unless-stopped
+    mem_limit: 64m
+    cpus: 0.25
     ports:
       - "${NOURISH_BIND_ADDRESS:-127.0.0.1}:${NOURISH_GATEWAY_PORT:-8081}:80"
     volumes:
@@ -30,6 +34,8 @@ services:
   tunnel:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
     command: tunnel --no-autoupdate run
     environment:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}

@@ -8,7 +8,7 @@
  */
 import { config } from '../shared/api/config';
 import { AppError } from '../shared/api/errors';
-import { request } from '../shared/api/http';
+import { request } from '../shared/api/ApiService';
 import { NUTRIENT_LABEL, scaleValue } from '../shared/domain/nutrients';
 import type {
   Assessment,

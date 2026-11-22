@@ -4,7 +4,7 @@
  */
 import { config } from '../shared/api/config';
 import { AppError } from '../shared/api/errors';
-import { request } from '../shared/api/http';
+import { request } from '../shared/api/ApiService';
 import type { FavoriteMeal, MealPlanEntry, Restaurant } from '../shared/domain/types';
 import { computeTotals, demoFavorites, demoRestaurants } from './fixtures';
 import { readJson, userKey, writeJson } from '../shared/state/storage';

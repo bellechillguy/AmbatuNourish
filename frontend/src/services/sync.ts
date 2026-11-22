@@ -2,7 +2,7 @@
  * Sinkronisasi offline untuk Meal Planning & Consumption History (FR-OFF, requirements §7.10).
  */
 import { config } from '../shared/api/config';
-import { request } from '../shared/api/http';
+import { request } from '../shared/api/ApiService';
 import type { ConsumptionRecord, MealPlanEntry } from '../shared/domain/types';
 import { buildDemoPlans, buildDemoRecords } from './fixtures';
 import { delay, ensureOnline } from './network';
