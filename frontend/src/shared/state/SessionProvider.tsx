@@ -78,7 +78,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         try {
           await identityService.logout();
         } catch (error) {
-          if (!(error instanceof AppError) || !['OFFLINE', 'TIMEOUT', 'UNAUTHORIZED'].includes(error.kind)) throw error;
+          // AmbatuFit belum punya endpoint pencabutan JWT. Akhiri sesi di perangkat.
+          if (!(error instanceof AppError) || !['OFFLINE', 'TIMEOUT', 'UNAUTHORIZED', 'CONTRACT_PENDING'].includes(error.kind)) throw error;
         }
         setJustRegistered(false);
         await persist(null);

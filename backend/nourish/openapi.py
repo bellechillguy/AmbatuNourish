@@ -50,9 +50,22 @@ PRODUCTS = many(ref('Product'))
 FAVORITES = many(ref('Favorite'))
 ITEMS = fields({'items': many(ref('MealItem'), minItems=1, maxItems=30)}, 'items')
 PLAN_PENDING = 'Kontrak Ambatufit masih ditunggu.'
-IDENTITY_PENDING = 'Login dan registrasi tersedia pada mode development. Identity & Access Ambatufit masih ditunggu.'
+IDENTITY_PENDING = 'Registrasi dan pengelolaan akun tersedia pada mode development. Kontrak akun bersama masih ditunggu.'
+FIT_IDENTITY = 'Memakai Identity & Access AmbatuFit lewat layanan integrasi jika dikonfigurasi.'
 RESTAURANT_PENDING = 'Kontrak lokasi dan menu Ambatueat masih ditunggu.'
 CATALOG_ERRORS = (404, 429, 502, 503, 504)
+PARTNER_ERRORS = (429, 502, 503, 504)
+REGIONAL_SUMMARY_FIELDS = {'id': ID_SCHEMA, 'name': STRING, 'region': STRING}
+REGIONAL_SUMMARY = fields(REGIONAL_SUMMARY_FIELDS, *REGIONAL_SUMMARY_FIELDS)
+REGIONAL_VARIANT_FIELDS = {
+    'id': STRING, 'name': STRING, 'portionQuantity': {'type': 'number', 'exclusiveMinimum': 0},
+    'portionUnit': STRING, 'source': STRING,
+    'nutrition': {'type': ['object', 'null'], 'additionalProperties': {'type': 'number', 'minimum': 0}},
+}
+REGIONAL_FIELDS = {
+    **REGIONAL_SUMMARY_FIELDS, 'story': STRING,
+    'variants': many(fields(REGIONAL_VARIANT_FIELDS, *REGIONAL_VARIANT_FIELDS), minItems=1, maxItems=20),
+}
 JSON = 'application/json'
 ERROR_MESSAGES = {
     401: 'Bearer token atau API key diperlukan dan harus valid.',
@@ -62,9 +75,9 @@ ERROR_MESSAGES = {
     415: 'Body harus menggunakan application/json.',
     422: 'Nilai permintaan tidak valid.',
     429: 'Batas permintaan terlampaui.',
-    502: 'Open Food Facts tidak dapat digunakan atau mengembalikan data tidak valid.',
-    503: 'Kontrak mitra belum tersedia atau Open Food Facts membatasi permintaan.',
-    504: 'Permintaan ke Open Food Facts melewati batas waktu.',
+    502: 'Layanan eksternal tidak tersedia atau mengembalikan data tidak valid.',
+    503: 'Integrasi mitra belum tersedia atau layanan eksternal membatasi permintaan.',
+    504: 'Permintaan ke layanan eksternal melewati batas waktu.',
 }
 
 
@@ -102,11 +115,11 @@ OPERATIONS = {
     ('POST', '/auth/register'): operation('Buat akun', ref('Session'), status=201, body=ref('Register'),
                                          errors=(429, 503), description=IDENTITY_PENDING),
     ('POST', '/auth/login'): operation('Masuk dan ambil token sesi', ref('Session'), body=ref('Login'),
-                                      errors=(401, 429, 503), description=IDENTITY_PENDING),
+                                      errors=(401, *PARTNER_ERRORS), description=FIT_IDENTITY),
     ('POST', '/auth/reset-password'): operation('Minta reset kata sandi', body=fields({'email': EMAIL}, 'email'),
                                                status=503, errors=(429, 503), description=PLAN_PENDING),
-    ('POST', '/auth/logout'): operation('Akhiri sesi', status=204),
-    ('GET', '/auth/me'): operation('Ambil profil pengguna', ref('Profile')),
+    ('POST', '/auth/logout'): operation('Akhiri sesi development', status=204, description=IDENTITY_PENDING),
+    ('GET', '/auth/me'): operation('Ambil profil pengguna', ref('Profile'), errors=PARTNER_ERRORS, description=FIT_IDENTITY),
     ('PATCH', '/auth/me'): operation('Ubah nama pengguna', ref('Profile'), body=fields({'name': STRING}, 'name')),
     ('GET', '/products'): operation('Cari produk pangan', PRODUCTS, query=(
         Q, PAGE, parameter('source', enum('ALL', 'OPEN_FOOD_FACTS', 'USER_ENTERED')),
@@ -115,6 +128,11 @@ OPERATIONS = {
     ('GET', '/products/barcode/{barcode}'): operation('Cari produk dari barcode', ref('Product'), errors=CATALOG_ERRORS),
     ('GET', '/products/{id}'): operation('Ambil detail produk', ref('Product'), errors=CATALOG_ERRORS),
     ('POST', '/products/{id}/refresh'): operation('Segarkan detail produk', ref('Product'), errors=CATALOG_ERRORS),
+    ('GET', '/regional-foods'): operation('Cari makanan daerah dari AmbatuEat', many(REGIONAL_SUMMARY, maxItems=100),
+                                           query=(Q,), errors=(422, *PARTNER_ERRORS)),
+    ('GET', '/regional-foods/{id}'): operation('Ambil detail makanan daerah dari AmbatuEat',
+        fields(REGIONAL_FIELDS, *REGIONAL_FIELDS), errors=(404, *PARTNER_ERRORS),
+        description='Nilai gizi ditampilkan bersama varian porsi sesuai data sumber.'),
     ('GET', '/manual-products'): operation('Daftar produk pribadi', PRODUCTS, query=(PAGE,), errors=(422,),
                                            description='Mengembalikan sampai 30 produk per halaman.'),
     ('POST', '/manual-products'): operation('Simpan produk pribadi', ref('Product'), status=201, body=ref('ManualProductInput'),
@@ -175,6 +193,9 @@ def build_openapi(routes, id_pattern):
             responses.setdefault('401', error_response(401))
         if auth in ('user', 'token'):
             responses.setdefault('503', error_response(503))
+        if auth == 'user':
+            for code in PARTNER_ERRORS:
+                responses.setdefault(str(code), error_response(code))
         if 'requestBody' in spec:
             for code in (413, 415, 422):
                 responses.setdefault(str(code), error_response(code))

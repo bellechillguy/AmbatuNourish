@@ -102,7 +102,7 @@ function mapError(status, json) {
   const data = details?.data;
   if (details?.code === 'CONTRACT_PENDING') return new AppError('CONTRACT_PENDING', undefined, { status });
   if (details?.code === 'OFF_RATE_LIMITED') return new AppError('RATE_LIMITED', undefined, { status });
-  if (details?.code === 'OFF_TIMEOUT') return new AppError('TIMEOUT', undefined, { status });
+  if (details?.code === 'OFF_TIMEOUT' || details?.code === 'PARTNER_TIMEOUT') return new AppError('TIMEOUT', undefined, { status });
   const fieldErrors = data
     ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, v?.message ?? 'Tidak valid']))
     : undefined;
@@ -114,6 +114,8 @@ function mapError(status, json) {
   if (status === 404) return new AppError('NOT_FOUND', undefined, { status });
   if (status === 409) return new AppError('CONFLICT', undefined, { status });
   if (status === 429) return new AppError('RATE_LIMITED', undefined, { status });
-  if (details?.code?.startsWith('OFF_')) return new AppError('PARTNER_UNAVAILABLE', undefined, { status });
+  if (details?.code?.startsWith('OFF_') || details?.code?.startsWith('PARTNER_')) {
+    return new AppError('PARTNER_UNAVAILABLE', undefined, { status });
+  }
   return new AppError('SERVER', undefined, { status });
 }

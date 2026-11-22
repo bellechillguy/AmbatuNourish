@@ -96,7 +96,7 @@ STB yang aktif sudah memiliki `ambatunourish-deploy.timer`. Timer mengecek branc
 | Health check | `https://stb.stei.fun/health` |
 | Repo dan dokumentasi | [AmbatuNourish](https://github.com/bellechillguy/AmbatuNourish/blob/main/backend/API.md) |
 
-Setelah URL publik merespons, gunakan `EXPO_PUBLIC_API_URL=https://stb.stei.fun/api/v1` di `frontend/.env` dan mulai ulang Metro. `/api` lama tetap bisa dipakai klien yang sudah terpasang. Login dan fitur akun publik menunggu kontrak Identity & Access Ambatufit. Pengujian akun lokal memakai override development dan volume sendiri.
+Untuk membuka API publik dari Expo, gunakan `EXPO_PUBLIC_API_URL=https://stb.stei.fun/api/v1` di `frontend/.env` dan mulai ulang Metro. `/api` lama tetap bisa dipakai klien yang sudah terpasang. Login dengan akun AmbatuFit memerlukan konfigurasi layanan integrasi di bawah ini. Pengujian akun lokal memakai override development dan volume sendiri.
 
 Migration SQL pada `backend/nourish/migrations` berjalan berurutan dan atomik saat startup. Sebelum upgrade, buat cadangan dengan SQLite online backup. Uji pemulihan pada volume staging. Untuk rollback skema, hentikan backend, pulihkan cadangan lengkap sebelum upgrade ke volume terpisah, lalu gunakan image versi yang sesuai.
 
@@ -111,8 +111,23 @@ Katalog menyimpan atribusi dan provenance Open Food Facts. Isi `OFF_CACHE_TTL_SE
 
 - Penilaian memakai batas yang dimasukkan pengguna dan bahan yang dipilih pengguna. Rumus klinis, skor, dan ambang bawaan menunggu kesepakatan domain.
 - Default sementara mengikuti UI yang sudah ada berupa produk manual privat, empat slot makan, maksimal tiga produk pembanding, enam metrik harian, dan penyelesaian konflik berdasarkan pilihan pengguna.
-- Komentar `# to do` menandai Identity & Access dan reset, Nutrition Plan, pengiriman Consumption History, trigger booking, pencarian restoran, dan pertukaran informasi gizi menu. Saat kontrak tersedia, lengkapi adapter, skema/versi mitra, dan pengujian kontraknya. Tentukan kebijakan retensi, penghapusan, akses, dan pengelolaan data bersama sebelum rilis produksi.
+- Komentar `# to do` menandai registrasi dan pengelolaan akun bersama, Nutrition Plan, pengiriman histori konsumsi, pemicu konsultasi, pencarian restoran, dan pertukaran informasi gizi menu.
 - API mitra milik AmbatuNourish di `/api/v1/partner` dapat diaktifkan dengan `NOURISH_PARTNER_API_KEY` di server. Endpoint hanya membaca katalog Open Food Facts dan aturan yang dikirim pemanggil untuk permintaannya sendiri.
+
+### Aktifkan login dan katalog mitra
+
+Expo memakai endpoint AmbatuNourish. Core di STB meneruskan panggilan ke layanan integrasi di host terpisah. Layanan integrasi memanggil `/auth/login` dan `/auth/me` AmbatuFit serta `/regional-foods` dan detailnya di AmbatuEat.
+
+1. Di host integrasi, buat `.env` dari `.env.example`. Isi `AMBATUFIT_BASE_URL` sampai `/api/v1`, `AMBATUEAT_API_KEY` dari mitra, dan `NOURISH_INTEGRATION_API_KEY` dengan secret internal acak. `AMBATUEAT_BASE_URL` sudah berisi alamat publik kelompok.
+2. Jalankan layanan di host integrasi. Arahkan proxy HTTPS pada host itu ke `http://127.0.0.1:8090`.
+
+   ```sh
+   docker compose -f docker-compose.integration.yml up -d --build --wait
+   curl -fsS http://127.0.0.1:8090/health
+   ```
+
+3. Pada `.env` STB, isi `NOURISH_INTEGRATION_BASE_URL` dengan alamat HTTPS proxy tersebut dan `NOURISH_INTEGRATION_API_KEY` dengan secret internal yang sama. Jalankan `docker compose up -d --build --wait core gateway` untuk menerapkan konfigurasi. Simpan API key AmbatuEat hanya di host integrasi.
+4. Di Expo, gunakan `EXPO_PUBLIC_USE_MOCK=false`. Masuk dengan akun AmbatuFit, buka **Produk Pangan → Makanan Daerah**, lalu coba cari dan buka detail satu makanan.
 
 ## Verifikasi
 
